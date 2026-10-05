@@ -12,3 +12,9 @@ Thumbs.db
 # 抓官方页面留下的原始 HTML（约 5MB，随时可用 research/fetch-nzta.cjs 重抓）。
 # 只提交解析脚本和提取出的知识点清单，不提交这堆 HTML。
 research/nzta-*.html
+
+# 参考站（roadcode.kannz.com）的示意图 —— 版权归对方，只用于本地比对画法，
+# 绝不入库、绝不上线。随时可用 research/fetch-kannz.cjs 重抓。
+research/kannz-img/
+research/kannz.json
+research/*.txt

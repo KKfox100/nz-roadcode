@@ -172,6 +172,84 @@ async function waitStyled(b) {
     check('缩略图按 5:3 长宽比，没被压扁', !!mk && Math.abs(mk.ratio - 400 / 240) < 0.15,
       mk ? mk.w + 'x' + mk.h : '');
 
+    /* ---------------- 3c. 路口场景图的车辆几何 ----------------
+       这一块专门给「车在车道里的位置和朝向」上锁。这类错误极其隐蔽：
+       之前 dir → 旋转角的映射写反了（标着向左的车实际朝右开），
+       而且所有车都骑在道路中心线上 —— 不盯着图仔细看根本发现不了，
+       但学员记住的会是错的。
+
+       判据用真实浏览器的 getBoundingClientRect：它会把 transform 算进去，
+       所以能真的验证「旋转之后车头朝哪边」，而不是重复一遍我自己的数学。 */
+    console.log('\n[3c] 路口场景图几何');
+    const geo = await b.eval(`(() => {
+      const host = document.createElement('div');
+      host.style.cssText = 'position:absolute;left:-9999px;top:0;width:400px';
+      document.body.appendChild(host);
+      const DIR = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+      const out = [];
+      for (const key of Object.keys(window.RC_IMAGES || {})) {
+        if (key.indexOf('sv-') !== 0) continue;
+        host.innerHTML = window.RC_IMAGES[key];
+        const svg = host.querySelector('svg');
+        const sb = svg.getBoundingClientRect();
+        const cars = [];
+        svg.querySelectorAll('g[data-dir], g[data-angle]').forEach(function (g) {
+          const body = g.querySelector('rect');
+          const front = g.querySelector('rect.car-front');
+          if (!body || !front) return;
+          const bb = body.getBoundingClientRect(), fb = front.getBoundingClientRect();
+          const ang = g.getAttribute('data-angle');
+          const d = g.getAttribute('data-dir');
+          const v = ang !== null
+            ? [Math.sin(ang * Math.PI / 180), -Math.cos(ang * Math.PI / 180)]
+            : DIR[d];
+          const dx = (fb.left + fb.width / 2) - (bb.left + bb.width / 2);
+          const dy = (fb.top + fb.height / 2) - (bb.top + bb.height / 2);
+          const len = Math.hypot(dx, dy) || 1;
+          cars.push({
+            d: d || Number(ang),
+            w: bb.width, h: bb.height,
+            cx: (bb.left + bb.width / 2) - sb.left,
+            cy: (bb.top + bb.height / 2) - sb.top,
+            cos: (dx * v[0] + dy * v[1]) / len
+          });
+        });
+        out.push({ key: key, cars: cars });
+      }
+      host.remove();
+      return out;
+    })()`);
+
+    const cars = geo.reduce((acc, g) => acc.concat(g.cars.map(c => Object.assign({ key: g.key }, c))), []);
+    const tag = c => c.key + '/' + c.d;
+    check('四张场景图都有车', cars.length >= 8, 'got ' + cars.length);
+    check('每辆车的车头朝向与标注一致（挡住左右颠倒）',
+      cars.every(c => c.cos > 0.7),
+      cars.filter(c => c.cos <= 0.7).map(c => tag(c) + ' cos=' + c.cos.toFixed(2)).join(', '));
+    check('南北向的车是竖的、东西向的车是横的（挡住旋转后拉长）',
+      cars.every(c => {
+        if (c.d === 'up' || c.d === 'down') return c.h > c.w;
+        if (c.d === 'left' || c.d === 'right') return c.w > c.h;
+        return true;
+      }),
+      cars.filter(c => {
+        if (c.d === 'up' || c.d === 'down') return !(c.h > c.w);
+        if (c.d === 'left' || c.d === 'right') return !(c.w > c.h);
+        return false;
+      }).map(c => tag(c) + ' ' + Math.round(c.w) + 'x' + Math.round(c.h)).join(', '));
+    /* 靠左行驶：北行占西半幅（x<200）、南行占东半幅、东行占北半幅（y<150）、西行占南半幅 */
+    check('所有车都靠左行驶，没有骑在道路中心线上',
+      cars.every(c => {
+        if (c.d === 'up') return c.cx < 200;
+        if (c.d === 'down') return c.cx > 200;
+        if (c.d === 'right') return c.cy < 150;
+        if (c.d === 'left') return c.cy > 150;
+        return true;   // 环岛里按切线摆的车不参与这条
+      }),
+      cars.filter(c => (c.d === 'up' && c.cx >= 200) || (c.d === 'down' && c.cx <= 200)
+        || (c.d === 'right' && c.cy >= 150) || (c.d === 'left' && c.cy <= 150))
+        .map(c => tag(c) + ' @' + Math.round(c.cx) + ',' + Math.round(c.cy)).join(', '));
+
     /* ---------------- 4. 单题页 ---------------- */
     console.log('\n[4] 单题页');
     await b.goto(BASE + '/study/question/sign-01/');

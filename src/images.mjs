@@ -323,82 +323,224 @@ export const signs = {
  * 一辆车。标签画在**车身正中**，而不是车身外侧 ——
  * 画在外侧时标签会随朝向跑出 viewBox（靠下的车尤其容易），
  * 也会和示意图的说明文字撞在一起。
+ *
+ * ⚠️ dir → 旋转角这一步必须对着坐标系想一遍。SVG 的 rotate() 是**顺时针**，
+ * 而车头画在矩形的上边（挡风玻璃在 y+0.10h）。所以：
+ *     朝右 = +90°（上边转到右边），朝左 = -90°。
+ * 这两个写反了，车就会朝着相反方向开 —— 而且图上完全看不出来，
+ * 除非你正好意识到「右转的车怎么跑到左边去了」。这里踩过这个坑。
+ *
+ * dir 也可以直接给角度（0 = 朝上，顺时针为正），环岛里按切线方向摆车要用。
+ * data-dir / data-angle 是留给测试读的：e2e 用它验证车头朝向与标签一致。
  */
 const car = (x, y, w, h, fill, label, dir = 'up') => {
-  const rot = { up: 0, down: 180, left: 90, right: -90 }[dir];
+  const rot = typeof dir === 'number' ? dir : { up: 0, right: 90, down: 180, left: -90 }[dir];
   const cx = x + w / 2;
   const cy = y + h / 2;
+  const mark = typeof dir === 'number' ? `data-angle="${dir}"` : `data-dir="${dir}"`;
   return `
-    <g transform="rotate(${rot} ${cx} ${cy})">
+    <g ${mark} transform="rotate(${rot} ${cx} ${cy})">
       <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(w, h) / 3}" fill="${fill}" stroke="#0f172a" stroke-width="2.5"/>
-      <rect x="${x + w * 0.16}" y="${y + h * 0.10}" width="${w * 0.68}" height="${h * 0.20}" rx="4" fill="#dbeafe" opacity="0.9"/>
+      <rect class="car-front" x="${x + w * 0.16}" y="${y + h * 0.10}" width="${w * 0.68}" height="${h * 0.20}" rx="4" fill="#dbeafe" opacity="0.9"/>
       <rect x="${x + w * 0.16}" y="${y + h * 0.68}" width="${w * 0.68}" height="${h * 0.20}" rx="4" fill="#dbeafe" opacity="0.55"/>
     </g>
     <circle cx="${cx}" cy="${cy}" r="14" fill="#ffffff" stroke="#0f172a" stroke-width="2.5"/>
     <text x="${cx}" y="${cy + 1}" font-family="${FONT}" font-size="15" font-weight="800" fill="#0f172a" text-anchor="middle" dominant-baseline="central">${label}</text>`;
 };
 
-const roadV = (x, w, h = 300) => `<rect x="${x}" y="0" width="${w}" height="${h}" fill="#cbd5e1"/>`;
-const roadH = (y, h, w = 400) => `<rect x="0" y="${y}" width="${w}" height="${h}" fill="#cbd5e1"/>`;
+/* ---------- 车道 ----------
 
-const dashes = (points, horizontal) =>
-  points.map(p => horizontal
-    ? `<line x1="${p}" y1="150" x2="${p + 26}" y2="150" stroke="#ffffff" stroke-width="4"/>`
-    : `<line x1="200" y1="${p}" x2="200" y2="${p + 26}" stroke="#ffffff" stroke-width="4"/>`
+   新西兰**靠左行驶**。画场景图时这是最容易错、也最要命的一条：
+   车在哪半幅、朝哪个方向，一旦画反，学员记住的就是错的 ——
+   而且他背下来的答案是对的，图上却是反的，考试时更混乱。
+
+   所以下面不手写车辆坐标，改成「给道路范围和方向，自动取靠左的半幅」。
+   位置从结构上推出来，就不可能把车画到对向车道上。 */
+
+const CAR_W = 42;   // 车宽（横跨车道）
+const CAR_L = 70;   // 车长（沿行车方向）
+
+/**
+ * 双向道路 `[起, 止]` 上，某个方向**靠左**的那半幅。
+ *
+ * 北行靠西（数值小的 x）、东行靠北（数值小的 y）；
+ * 南行靠东、西行靠南 —— 都是数值大的那一半。
+ */
+const leftHalf = (band, dir) => {
+  const mid = (band[0] + band[1]) / 2;
+  return (dir === 'up' || dir === 'right') ? [band[0], mid] : [mid, band[1]];
+};
+
+/**
+ * 把车放进靠左的车道并居中。
+ *
+ * pos   车头那一侧的坐标（北行/南行给车头的 y，东行/西行给车头的 x）
+ * band  道路在**垂直于行车方向**那条轴上的范围
+ *
+ * ⚠️ car() 的 w/h 语义是「横跨车宽 × 沿行车方向的车长」，车头永远画在上边，
+ * 左右朝向靠 rotate 得到。所以这里**两种朝向都传 (CAR_W, CAR_L)**，
+ * 绝不能因为「横向的车应该是宽的」就把两个值对调 —— 那样转 90° 之后
+ * 车会变成竖的（横向行驶的车画成一根竖着的药丸）。
+ */
+const laneCar = (pos, dir, band, fill, label) => {
+  const [lo, hi] = leftHalf(band, dir);
+  const c = (lo + hi) / 2;
+  if (dir === 'up' || dir === 'down') {
+    return car(c - CAR_W / 2, pos, CAR_W, CAR_L, fill, label, dir);
+  }
+  // 旋转绕矩形中心，所以中心要放在 pos + CAR_L/2 处
+  return car(pos + CAR_L / 2 - CAR_W / 2, c - CAR_L / 2, CAR_W, CAR_L, fill, label, dir);
+};
+
+/* ---------- 道路配色 ----------
+
+   沥青必须**明显比背景深**，否则白色标线会融进路面里 ——
+   对比参考站（roadcode.kannz.com）的图就能看出差距：他们的路面是深灰，
+   白线一眼可辨；我们原来路面 #cbd5e1、白线 #ffffff，两者太接近，
+   「车在哪个车道」在图上根本看不出来。
+
+   颜色仍然压在莫兰迪的低饱和区间里（沥青 #7c8480 饱和度约 4%）。 */
+const RM = '#757a75';   // 沥青路面
+const RG = '#cdd7c3';   // 路肩草地（场景图用）
+const RB = '#eceee9';   // 路面以外的中性背景（标线图用）
+const RW = '#ffffff';   // 白色标线
+const RY = '#f0b429';   // 黄色标线（新西兰黄线偏橙）
+const RK = '#26302e';   // 路径箭头等深色前景
+
+const roadV = (x, w, h = 300) => `<rect x="${x}" y="0" width="${w}" height="${h}" fill="${RM}"/>`;
+const roadH = (y, h, w = 400) => `<rect x="0" y="${y}" width="${w}" height="${h}" fill="${RM}"/>`;
+
+/**
+ * 行车路径箭头 —— 参考站每辆车都配一条粗黑曲线，方向一眼可辨。
+ * 光靠车身朝向不够：车头是圆角矩形，缩到手机上很难分辨朝哪边。
+ */
+const pathArrow = (d, color = RK) =>
+  `<path d="${d}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" marker-end="url(#arw)"/>`;
+
+/** 让行冲突点：橙黄色星芒，标出两车会撞上的位置 */
+const conflict = (x, y) => `
+  <path transform="translate(${x} ${y})" fill="${RY}" stroke="#9a3412" stroke-width="1.6" stroke-linejoin="round"
+        d="M0 -12 L3.2 -3.2 L12 0 L3.2 3.2 L0 12 L-3.2 3.2 L-12 0 L-3.2 -3.2 Z"/>`;
+
+/** 箭头标记定义（每个用到 pathArrow 的图都要带上） */
+const ARROW_DEFS = `<defs>
+    <marker id="arw" markerWidth="6" markerHeight="6" refX="4.4" refY="3" orient="auto">
+      <path d="M0 0 L5.4 3 L0 6 Z" fill="${RK}"/>
+    </marker>
+  </defs>`;
+
+/**
+ * 沿道路中心线画虚线。
+ * center = 中心线在**固定轴**上的坐标（横路给 y，竖路给 x）。
+ * 之前把这两个值写死成 150 / 200，结果 T 型路口那条横路中心是 132，
+ * 虚线就画到路面外面去了 —— 所以必须由调用方传。
+ */
+const dashes = (points, dir, center) =>
+  points.map(p => dir === 'h'
+    ? `<line x1="${p}" y1="${center}" x2="${p + 26}" y2="${center}" stroke="#ffffff" stroke-width="4"/>`
+    : `<line x1="${center}" y1="${p}" x2="${center}" y2="${p + 26}" stroke="#ffffff" stroke-width="4"/>`
   ).join('');
 
+/* 十字路口的几何：两条双向道路交叉，中心 (200,150)。
+   每条路 96 宽 = 两车道各 48。 */
+const XV = [152, 248];   // 竖向道路的 x 范围
+const YH = [102, 198];   // 横向道路的 y 范围
+
 export const diagrams = {
+  /* 蓝车北行直行；红车从右侧（东）西行驶来 —— 让右方来车。
+     冲突点在路口中心偏蓝车一侧（两车都要经过那里）。 */
   'sv-crossroads': () => `
     <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="无标志十字路口让行示意">
-      <rect width="400" height="300" fill="#f1f5f9"/>
-      ${roadV(152, 96)}
-      ${roadH(102, 96)}
-      ${dashes([20, 66, 210, 256], false)}
-      ${dashes([20, 66, 262, 308], true)}
-      ${car(178, 196, 44, 78, '#2563eb', '蓝')}
-      ${car(258, 128, 78, 44, '#dc2626', '红', 'left')}
+      <rect width="400" height="300" fill="${RG}"/>
+      ${roadV(XV[0], XV[1] - XV[0])}
+      ${roadH(YH[0], YH[1] - YH[0])}
+      ${dashes([20, 66, 210, 256], 'v', 200)}
+      ${dashes([20, 66, 262, 308], 'h', 150)}
+      ${pathArrow('M176 196 L176 138')}
+      ${pathArrow('M258 174 L214 174')}
+      ${conflict(176, 152)}
+      ${laneCar(196, 'up', XV, '#2563eb', '蓝')}
+      ${laneCar(258, 'left', YH, '#dc2626', '红')}
+      ${ARROW_DEFS}
     </svg>`,
 
+  /* 环岛顺时针（靠左行驶）。蓝车从南侧支路准备进入，红车已在环内、
+     正从蓝车右方绕过来 —— 进环岛要让右侧已在环内的车。 */
   'sv-roundabout': () => `
     <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="环岛让行示意">
-      <rect width="400" height="300" fill="#f1f5f9"/>
-      ${roadV(152, 96)}
-      ${roadH(102, 96)}
-      <circle cx="200" cy="150" r="62" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="0"/>
-      <circle cx="200" cy="150" r="62" fill="none" stroke="#cbd5e1" stroke-width="46"/>
-      <circle cx="200" cy="150" r="39" fill="#a7f3d0" stroke="#94a3b8" stroke-width="3"/>
-      <circle cx="200" cy="150" r="85" fill="none" stroke="#ffffff" stroke-width="3" stroke-dasharray="14 10"/>
-      ${car(258, 108, 74, 42, '#dc2626', '红', 'left')}
-      ${car(180, 214, 42, 74, '#2563eb', '蓝')}
+      <rect width="400" height="300" fill="${RG}"/>
+      ${roadV(XV[0], XV[1] - XV[0])}
+      ${roadH(YH[0], YH[1] - YH[0])}
+      <circle cx="200" cy="150" r="53" fill="none" stroke="${RM}" stroke-width="54"/>
+      <circle cx="200" cy="150" r="26" fill="#b9c9ae" stroke="#8d9a86" stroke-width="3"/>
+      <circle cx="200" cy="150" r="84" fill="none" stroke="${RW}" stroke-width="3" stroke-dasharray="14 10"/>
+      ${laneCar(228, 'up', XV, '#2563eb', '蓝')}
+      ${car(217, 153, CAR_W, CAR_L, '#dc2626', '红', 225)}
+      ${pathArrow('M176 224 Q176 190 200 186')}
+      ${conflict(204, 190)}
+      ${ARROW_DEFS}
     </svg>`,
 
+  /* 蓝车在支路，红车在贯通道路上（东行，从西侧驶来）—— 支路让主路 */
   'sv-t-junction': () => `
     <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="T 型路口让行示意">
-      <rect width="400" height="300" fill="#f1f5f9"/>
+      <rect width="400" height="300" fill="${RG}"/>
       ${roadH(84, 96)}
-      <rect x="152" y="180" width="96" height="120" fill="#cbd5e1"/>
-      ${dashes([20, 66, 262, 308], true)}
-      <line x1="200" y1="196" x2="200" y2="222" stroke="#ffffff" stroke-width="4"/>
-      ${car(74, 110, 78, 44, '#dc2626', '红', 'right')}
-      ${car(178, 200, 44, 78, '#2563eb', '蓝')}
+      <rect x="152" y="180" width="96" height="120" fill="${RM}"/>
+      ${dashes([20, 66, 262, 308], 'h', 132)}
+      ${dashes([200, 248], 'v', 200)}
+      ${pathArrow('M74 108 L330 108')}
+      ${pathArrow('M176 200 L176 176')}
+      ${conflict(176, 118)}
+      ${laneCar(74, 'right', [84, 180], '#dc2626', '红')}
+      ${laneCar(200, 'up', [152, 248], '#2563eb', '蓝')}
+      ${ARROW_DEFS}
     </svg>`,
 
+  /* 蓝车右转，红车对向（南行）直行 —— 右转要让对向直行。
+     冲突点在蓝车右转轨迹与红车直行路线的交叉处。 */
   'sv-right-turn': () => `
     <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="右转让直行示意">
-      <rect width="400" height="300" fill="#f1f5f9"/>
-      ${roadV(152, 96)}
-      ${roadH(102, 96)}
-      ${dashes([20, 66, 210, 256], false)}
-      ${dashes([20, 66, 262, 308], true)}
-      ${car(180, 196, 42, 74, '#2563eb', '蓝')}
-      ${car(180, 26, 42, 74, '#dc2626', '红', 'down')}
-      <path d="M202 214 Q202 150 268 150" fill="none" stroke="#2563eb" stroke-width="4" stroke-dasharray="9 7" marker-end="url(#arw)"/>
-      <defs>
-        <marker id="arw" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
-          <path d="M0 0 L7 3 L0 6 Z" fill="#2563eb"/>
-        </marker>
-      </defs>
+      <rect width="400" height="300" fill="${RG}"/>
+      ${roadV(XV[0], XV[1] - XV[0])}
+      ${roadH(YH[0], YH[1] - YH[0])}
+      ${dashes([20, 66, 210, 256], 'v', 200)}
+      ${dashes([20, 66, 262, 308], 'h', 150)}
+      ${pathArrow('M224 26 L224 132')}
+      ${pathArrow('M176 192 Q176 126 250 126')}
+      ${conflict(224, 128)}
+      ${laneCar(26, 'down', XV, '#dc2626', '红')}
+      ${laneCar(196, 'up', XV, '#2563eb', '蓝')}
+      ${ARROW_DEFS}
     </svg>`,
+};
+
+/**
+ * 场景图的几何参考线 —— 只给人工核对用（tools/figure-sheet.mjs 会叠上去）。
+ * 单看一张场景图很难判断车在不在正确车道；叠上道路边缘和中心线之后，
+ * 「有没有压中心线、有没有占到对向车道」一眼就能看出来。
+ */
+const crossRoadGuides = [
+  { axis: 'v', at: XV[0], color: '#2563eb' },
+  { axis: 'v', at: XV[1], color: '#2563eb' },
+  { axis: 'v', at: 200, color: '#dc2626' },
+  { axis: 'h', at: YH[0], color: '#2563eb' },
+  { axis: 'h', at: YH[1], color: '#2563eb' },
+  { axis: 'h', at: 150, color: '#dc2626' },
+];
+
+export const diagramGuides = {
+  'sv-crossroads': crossRoadGuides,
+  'sv-roundabout': crossRoadGuides,
+  'sv-right-turn': crossRoadGuides,
+  'sv-t-junction': [
+    { axis: 'h', at: 84, color: '#2563eb' },
+    { axis: 'h', at: 180, color: '#2563eb' },
+    { axis: 'h', at: 132, color: '#dc2626' },
+    { axis: 'v', at: 152, color: '#2563eb' },
+    { axis: 'v', at: 248, color: '#2563eb' },
+    { axis: 'v', at: 200, color: '#dc2626' },
+  ],
 };
 
 /* ---------- 道路标线（俯视） ----------
@@ -408,13 +550,8 @@ export const diagrams = {
    所以这里全部画成俯视图 —— 学习时看到的就是实际开车时看到的样子。
 
    配色沿用场景图：路面 #cbd5e1，白色标线 #ffffff，黄色标线 #f0b429
-   （新西兰黄线偏橙，不是纯黄）。
+   （新西兰黄线偏橙，不是纯黄）。常量见文件上方的「道路配色」。
 */
-
-const RM = '#cbd5e1';   // 路面
-const RB = '#f1f5f9';   // 路面以外的背景
-const RW = '#ffffff';   // 白色标线
-const RY = '#f0b429';   // 黄色标线
 
 /** 一条水平双向道路；centerLine / edge 由调用方给出 */
 const lane = (centerLine = '', edge = '') => `
@@ -510,7 +647,7 @@ export const markings = {
     <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="自行车道">
       <rect width="400" height="240" fill="${RB}"/>
       <rect x="0" y="40" width="400" height="160" fill="${RM}"/>
-      <rect x="0" y="40" width="400" height="46" fill="#dbe3ea"/>
+      <rect x="0" y="40" width="400" height="46" fill="#8fa886"/>
       <line x1="0" y1="86" x2="400" y2="86" stroke="${RW}" stroke-width="6"/>
       <line x1="0" y1="120" x2="400" y2="120" stroke="${RW}" stroke-width="6" stroke-dasharray="40 30"/>
       <g transform="translate(170,44) scale(1.05)" fill="none" stroke="${RW}" stroke-width="5" stroke-linecap="round">

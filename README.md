@@ -96,13 +96,16 @@ src/images.mjs     自绘 SVG 图示库：30 个标志 + 4 个路口场景 + 14 
 src/styles.css     样式表（手写，无框架；莫兰迪设计令牌 + H5 布局）
 src/app.js         前端交互：逐题学习 + 模拟考试
 tools/check-coverage.cjs  覆盖度体检（构建时自动跑，也可单独执行）
-tools/markings-sheet.mjs  生成标线对照页，人工核对图示质量
+tools/figure-sheet.mjs    生成图示对照页（场景图叠车道参考线 / 标线完整+加粗），人工核对质量
+tools/shot-live.cjs       抓页面截图（--questions / --sheet / --scenes / --kannz）
 build.mjs          构建脚本：把题库渲染成静态站点到 dist/
 dist/              构建产物（= Cloudflare 静态资源目录，已 gitignore）
-tests/e2e.cjs      端到端测试（真实 Chrome + CDP，130 项断言）
+tests/e2e.cjs      端到端测试（真实 Chrome + CDP，134 项断言）
 tests/live-security.cjs  线上安全检查（源码/数据文件不可访问）
 wrangler.jsonc     Cloudflare Workers 部署配置
-research/          抓官方题目的研究脚本与原始 HTML（不部署，仅供核对）
+research/          研究脚本与原始素材（不部署，仅供核对）
+                   fetch-nzta.cjs / extract-topics.cjs  抓官方考纲
+                   fetch-kannz.cjs / contact-sheet.cjs  抓参考站示意图并拼成对照页
 ```
 
 构建期就把每一道题渲染成了真实 HTML（含 JSON-LD 结构化数据），
@@ -127,8 +130,48 @@ research/          抓官方题目的研究脚本与原始 HTML（不部署，�
 **开车时实际看到的俯视视角**，颜色也按新西兰实际用色（黄线偏橙 `#f0b429`，
 不是纯黄）。
 
-配色沿用同一套：路面 `#cbd5e1`，白色标线 `#ffffff`，黄色标线 `#f0b429`，
-路面以外背景 `#f1f5f9`。
+配色：沥青 `#757a75`、路肩草地 `#cdd7c3`、白色标线 `#ffffff`、
+黄色标线 `#f0b429`（新西兰黄线偏橙，不是纯黄）、路径箭头 `#26302e`。
+
+**沥青必须明显比背景深。** 一开始用的是 `#cbd5e1` 路面 + `#f1f5f9` 背景，
+两者太接近，白线几乎融进路面里 —— 结果是「车在哪个车道」在图上根本看不出来。
+对照 roadcode.kannz.com 的图才看清差距：他们的路面是深灰，白线一眼可辨。
+改深之后，标线图和场景图的可读性都上了一个台阶。
+
+### ⚠️ 场景图：车辆位置和方向必须靠左行驶来推
+
+新西兰**靠左行驶**。画路口场景图时这是最容易错、也最要命的一条：
+车在哪半幅、朝哪个方向，一旦画反，学员记住的就是错的 ——
+而且他背下来的答案是对的，图上却是反的，考试时更混乱。
+
+所以 `src/images.mjs` 里**不手写车辆坐标**，而是：
+
+```js
+laneCar(pos, dir, band, fill, label)
+//  pos   车头那一侧的坐标
+//  dir   up / down / left / right
+//  band  道路在垂直于行车方向那条轴上的范围，如 [152, 248]
+```
+
+车道由 `leftHalf(band, dir)` 推出来（北行靠西、东行靠北；南行靠东、西行靠南），
+车在车道里自动居中。**位置从结构上推出来，就不可能把车画到对向车道上。**
+
+两个踩过的坑，都写在代码注释里了：
+
+1. **`dir` → 旋转角曾经是反的。** SVG 的 `rotate()` 是顺时针，车头画在矩形上边，
+   所以「朝右」是 `+90`。原来写的是 `-90`，导致标着「向左」的车实际朝右开 ——
+   图上不盯着看根本发现不了。
+2. **`car()` 的 `w/h` 语义是「横跨车宽 × 沿行车方向的车长」**，车头永远画在上边，
+   左右朝向靠旋转得到。所以左右行驶的车也要传 `(CAR_W, CAR_L)`，
+   不能因为「横向的车应该是宽的」就把两个值对调 —— 那样转 90° 之后
+   车会变成一根竖着的药丸。
+
+这两条都有 E2E 断言守着（见「测试」一节的 `[3c]`），而且验证过：
+把 bug 改回去，断言确实会红。
+
+场景图还配了**路径箭头**（粗黑曲线，方向一眼可辨）和**冲突点标记**
+（橙黄星芒，标出两车会撞上的位置）—— 这两样是参考 roadcode.kannz.com 加的，
+光靠车身朝向在手机尺寸下不够清楚。
 
 ### 列表缩略图要单独一套加粗版
 
@@ -149,8 +192,9 @@ research/          抓官方题目的研究脚本与原始 HTML（不部署，�
 改完图示想一次性检查质量，跑：
 
 ```bash
-node tools/markings-sheet.mjs     # 生成 dist/__sheet.html：14 个标线 × 完整/加粗 两版并排
-BASE=http://127.0.0.1:8792 node tools/shot-live.cjs --sheet   # 截图到 tests/shots/markings-sheet.png
+node tools/figure-sheet.mjs              # dist/__sheet.html：场景图（叠车道参考线）+ 标线完整/加粗 两版
+node tools/figure-sheet.mjs --scenes     # dist/__scenes.html：只放场景图，2 列大图
+BASE=http://127.0.0.1:8792 node tools/shot-live.cjs --scenes   # 截图到 tests/shots/scenes.png
 ```
 
 单看一张图很难判断比例对不对（条纹粗细、间隔、线宽够不够看清），
@@ -264,6 +308,26 @@ theme-color）** / console 错误。
 图示数量从 `dist/assets/images.js` 现数（`IMG_COUNT`）——
 否则每次补题都会红一片，改测试比补题还费时间。
 
+### `[3c]` 场景图几何：给「车在哪个车道、朝哪边」上锁
+
+这一组断言专门守 `src/images.mjs` 里那两条踩过的坑（`dir` 旋转角左右颠倒、
+车骑在道路中心线上）。这类错误极其隐蔽 —— 图上不盯着看根本发现不了，
+但学员记住的会是错的。判据用真实浏览器的 `getBoundingClientRect`：
+它会把 `transform` 算进去，所以能真的验证「旋转之后车头朝哪边」，
+而不是把我自己的数学再抄一遍。
+
+四条断言：
+
+| 断言 | 挡住什么 |
+|---|---|
+| 每辆车的车头朝向与标注一致 | `dir` → 旋转角写反（车朝反方向开） |
+| 南北向的车是竖的、东西向的车是横的 | `car()` 的 `w/h` 传反（横向的车变竖） |
+| 所有车都靠左行驶，没有骑在道路中心线上 | 车没放进车道（压中心线 / 占对向车道） |
+
+**这组断言验证过是有效的**：把两个 bug 分别改回去跑一遍，断言确实会红 ——
+`dir` 颠倒时报 `cos=-1.00`，车骑中心线时把 6 辆车全列了出来。
+写测试时如果没做这一步，很容易得到一组「永远绿」的假断言。
+
 截图输出在 `tests/shots/`。
 
 同一个脚本可以直接跑线上（把 `BASE` 指过去），验证部署结果：
@@ -273,9 +337,9 @@ BASE=https://nz-roadcode.2412.workers.dev npm test
 ```
 
 另外 `tests/live-security.cjs` 专门验证**构建目录隔离**是否真的生效 ——
-它会逐个请求 `.git/config`、`package.json`、`data/*.json`、`src/*` 等 18 个
+它会逐个请求 `.git/config`、`package.json`、`data/*.json`、`src/*` 等 28 个
 不该公开的路径，全部必须返回 404；一旦有一个返回 200，说明源码或提交历史
-已经挂在公网上了：
+已经挂在公网上了。新增开发脚本时记得往 `MUST_404` 里加一条：
 
 ```bash
 npm run test:live
