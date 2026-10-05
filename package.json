@@ -1,0 +1,17 @@
+{
+  "name": "nz-roadcode",
+  "version": "1.0.0",
+  "private": true,
+  "description": "新西兰交规理论学习和模拟考试 —— 纯静态站点，无广告",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "wrangler dev",
+    "deploy": "node build.mjs && wrangler deploy",
+    "preview": "node build.mjs && wrangler dev",
+    "test": "node tests/e2e.cjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.147.0"
+  }
+}

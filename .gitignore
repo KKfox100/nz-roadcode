@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.wrangler/
+tests/shots/
+tests/last-run.txt
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*

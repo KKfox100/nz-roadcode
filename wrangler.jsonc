@@ -1,0 +1,22 @@
+{
+  // Cloudflare Workers 静态资源部署配置
+  // 部署：npm run deploy   （先构建 dist/，再上传）
+  // 本地：npm run dev      （wrangler 会按线上同样的规则处理 _headers 与 404 回落）
+
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nz-roadcode",
+  "compatibility_date": "2026-09-24",
+
+  "assets": {
+    // 只上传构建产物目录，源码 / 题库 / 构建脚本都留在仓库里，不会出现在公网。
+    // 注意：assets 没有 exclude 字段（写了会被静默忽略），所以隔离靠"目录分离"实现。
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    // 本站是真实多页站点，不是哈希路由 SPA。
+    // 用 404-page 而不是 single-page-application：后者会让任意乱输的路径
+    // 都返回 200 + 首页内容，形成软 404，稀释搜索引擎收录质量。
+    "not_found_handling": "404-page"
+  },
+
+  "observability": { "enabled": true }
+}
