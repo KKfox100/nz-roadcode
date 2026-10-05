@@ -401,6 +401,158 @@ export const diagrams = {
     </svg>`,
 };
 
+/* ---------- 道路标线（俯视） ----------
+
+   标线和标志牌是两种东西：标志牌考「这个牌子什么意思」，标线考「路上这条线
+   能不能压」。后者光靠文字描述（「黄色实线」「白色虚线」）很容易背混，
+   所以这里全部画成俯视图 —— 学习时看到的就是实际开车时看到的样子。
+
+   配色沿用场景图：路面 #cbd5e1，白色标线 #ffffff，黄色标线 #f0b429
+   （新西兰黄线偏橙，不是纯黄）。
+*/
+
+const RM = '#cbd5e1';   // 路面
+const RB = '#f1f5f9';   // 路面以外的背景
+const RW = '#ffffff';   // 白色标线
+const RY = '#f0b429';   // 黄色标线
+
+/** 一条水平双向道路；centerLine / edge 由调用方给出 */
+const lane = (centerLine = '', edge = '') => `
+  <rect width="400" height="240" fill="${RB}"/>
+  <rect x="0" y="60" width="400" height="120" fill="${RM}"/>
+  ${edge}
+  ${centerLine}`;
+
+export const markings = {
+  'mark-center-yellow-solid': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="道路中央黄色实线">
+      ${lane(`<line x1="0" y1="120" x2="400" y2="120" stroke="${RY}" stroke-width="7"/>`)}
+    </svg>`,
+
+  'mark-center-yellow-dashed': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="道路中央黄色虚线">
+      ${lane(`<line x1="0" y1="120" x2="400" y2="120" stroke="${RY}" stroke-width="7" stroke-dasharray="40 30"/>`)}
+    </svg>`,
+
+  'mark-center-white-dashed': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="道路中央白色虚线">
+      ${lane(`<line x1="0" y1="120" x2="400" y2="120" stroke="${RW}" stroke-width="7" stroke-dasharray="40 30"/>`)}
+    </svg>`,
+
+  'mark-center-white-solid': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="道路中央白色实线">
+      ${lane(`<line x1="0" y1="120" x2="400" y2="120" stroke="${RW}" stroke-width="7"/>`)}
+    </svg>`,
+
+  'mark-edge-white-solid': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="道路边缘白色实线">
+      ${lane('', `
+        <line x1="0" y1="74" x2="400" y2="74" stroke="${RW}" stroke-width="6"/>
+        <line x1="0" y1="166" x2="400" y2="166" stroke="${RW}" stroke-width="6"/>`)}
+    </svg>`,
+
+  'mark-edge-yellow-dashed': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="路边黄色虚线">
+      ${lane('', `
+        <line x1="0" y1="82" x2="400" y2="82" stroke="${RY}" stroke-width="7" stroke-dasharray="40 30"/>
+        <line x1="0" y1="158" x2="400" y2="158" stroke="${RY}" stroke-width="7" stroke-dasharray="40 30"/>`)}
+    </svg>`,
+
+  'mark-edge-yellow-solid': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="路边黄色实线">
+      ${lane('', `
+        <line x1="0" y1="82" x2="400" y2="82" stroke="${RY}" stroke-width="7"/>
+        <line x1="0" y1="158" x2="400" y2="158" stroke="${RY}" stroke-width="7"/>`)}
+    </svg>`,
+
+  'mark-hatched-median': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="中央斜线阴影区">
+      ${lane('')}
+      <line x1="70" y1="96" x2="330" y2="96" stroke="${RW}" stroke-width="5"/>
+      <line x1="70" y1="144" x2="330" y2="144" stroke="${RW}" stroke-width="5"/>
+      <g stroke="${RW}" stroke-width="5" stroke-linecap="round">
+        <line x1="76" y1="144" x2="100" y2="96"/>
+        <line x1="116" y1="144" x2="140" y2="96"/>
+        <line x1="156" y1="144" x2="180" y2="96"/>
+        <line x1="196" y1="144" x2="220" y2="96"/>
+        <line x1="236" y1="144" x2="260" y2="96"/>
+        <line x1="276" y1="144" x2="300" y2="96"/>
+        <line x1="316" y1="144" x2="330" y2="112"/>
+      </g>
+    </svg>`,
+
+  'mark-yellow-box': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="黄色网格禁停区">
+      <rect width="400" height="240" fill="${RB}"/>
+      <rect x="0" y="0" width="400" height="240" fill="${RM}"/>
+      <rect x="96" y="46" width="208" height="148" fill="${RM}"/>
+      <rect x="96" y="46" width="208" height="148" fill="none" stroke="${RY}" stroke-width="6"/>
+      <g stroke="${RY}" stroke-width="5" stroke-linecap="round">
+        <line x1="96" y1="46" x2="200" y2="194"/>
+        <line x1="96" y1="120" x2="304" y2="46"/>
+        <line x1="96" y1="194" x2="304" y2="120"/>
+        <line x1="200" y1="46" x2="304" y2="194"/>
+      </g>
+    </svg>`,
+
+  'mark-zebra-crossing': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="人行横道（斑马线）">
+      <rect width="400" height="240" fill="${RM}"/>
+      <g fill="${RW}">
+        <rect x="132" y="16" width="26" height="208"/>
+        <rect x="174" y="16" width="26" height="208"/>
+        <rect x="216" y="16" width="26" height="208"/>
+        <rect x="258" y="16" width="26" height="208"/>
+      </g>
+    </svg>`,
+
+  'mark-cycle-lane': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="自行车道">
+      <rect width="400" height="240" fill="${RB}"/>
+      <rect x="0" y="40" width="400" height="160" fill="${RM}"/>
+      <rect x="0" y="40" width="400" height="46" fill="#dbe3ea"/>
+      <line x1="0" y1="86" x2="400" y2="86" stroke="${RW}" stroke-width="6"/>
+      <line x1="0" y1="120" x2="400" y2="120" stroke="${RW}" stroke-width="6" stroke-dasharray="40 30"/>
+      <g transform="translate(170,44) scale(1.05)" fill="none" stroke="${RW}" stroke-width="5" stroke-linecap="round">
+        <circle cx="12" cy="30" r="11"/>
+        <circle cx="52" cy="30" r="11"/>
+        <path d="M12 30 L26 12 L42 12 L52 30 M26 12 L32 30 L12 30 M42 12 L36 30"/>
+      </g>
+    </svg>`,
+
+  'mark-no-marking-junction': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="没有标志也没有标线的十字路口">
+      <rect width="400" height="240" fill="${RB}"/>
+      <rect x="0" y="76" width="400" height="88" fill="${RM}"/>
+      <rect x="156" y="0" width="88" height="240" fill="${RM}"/>
+    </svg>`,
+
+  'mark-bridge-giveway': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="单车道桥，本侧须让行">
+      <rect width="400" height="240" fill="${RB}"/>
+      <rect x="0" y="72" width="400" height="96" fill="${RM}"/>
+      <rect x="146" y="96" width="108" height="48" fill="#aab6c2"/>
+      <line x1="146" y1="96" x2="254" y2="96" stroke="#64748b" stroke-width="6"/>
+      <line x1="146" y1="144" x2="254" y2="144" stroke="#64748b" stroke-width="6"/>
+      <circle cx="70" cy="120" r="30" fill="#dc2626" stroke="#ffffff" stroke-width="5"/>
+      <polygon points="70,102 86,132 54,132" fill="#ffffff"/>
+      <polygon points="70,102 86,132 54,132" fill="none"/>
+      <text x="70" y="176" font-family="${FONT}" font-size="15" font-weight="700" fill="#b91c1c" text-anchor="middle">让行</text>
+    </svg>`,
+
+  'mark-bridge-priority': () => `
+    <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="单车道桥，本侧优先通行">
+      <rect width="400" height="240" fill="${RB}"/>
+      <rect x="0" y="72" width="400" height="96" fill="${RM}"/>
+      <rect x="146" y="96" width="108" height="48" fill="#aab6c2"/>
+      <line x1="146" y1="96" x2="254" y2="96" stroke="#64748b" stroke-width="6"/>
+      <line x1="146" y1="144" x2="254" y2="144" stroke="#64748b" stroke-width="6"/>
+      <rect x="40" y="92" width="60" height="56" rx="6" fill="#1d4ed8" stroke="#ffffff" stroke-width="5"/>
+      <polygon points="70,102 90,120 70,138" fill="#ffffff"/>
+      <text x="70" y="176" font-family="${FONT}" font-size="15" font-weight="700" fill="#1d4ed8" text-anchor="middle">优先</text>
+    </svg>`
+};
+
 /**
  * 场景示意图的文字说明。
  * 刻意**不画进 SVG 里** —— 画在 SVG 内会和车辆标签抢位置（两者都在图的下方），
@@ -413,7 +565,7 @@ export const captions = {
   'sv-right-turn': '蓝车右转 · 红车对向直行'
 };
 
-export const allImages = { ...signs, ...diagrams };
+export const allImages = { ...signs, ...diagrams, ...markings };
 
 /** 按 key 取 SVG；找不到时返回一个占位图而不是抛错。 */
 export function renderImage(key) {

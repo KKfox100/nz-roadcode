@@ -9,8 +9,27 @@
 
 const { launch, createChecker, sleep } = require('./cdp-client.cjs');
 const path = require('path');
+const fs = require('fs');
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8787';
+
+/**
+ * 题库总题数直接从 data/ 算出来，不要在断言里写死数字 ——
+ * 每次补题都要回来改测试，早晚会漏。
+ */
+const DATA_DIR = path.join(__dirname, '..', 'data');
+const loadCat = f => JSON.parse(fs.readFileSync(path.join(DATA_DIR, f + '.json'), 'utf8'));
+const TOTAL_QUESTIONS = fs.readdirSync(DATA_DIR)
+  .filter(f => f.endsWith('.json') && !f.startsWith('topic'))
+  .reduce((n, f) => n + loadCat(f.replace(/\.json$/, '')).questions.length, 0);
+
+/** 自绘图示总数：从构建产物里数，同样不写死 */
+const IMG_COUNT = (() => {
+  const line = fs.readFileSync(path.join(__dirname, '..', 'dist', 'assets', 'images.js'), 'utf8')
+    .split('\n').find(l => l.startsWith('window.RC_IMAGES'));
+  if (!line) return 0;
+  return Object.keys(JSON.parse(line.replace(/^window\.RC_IMAGES = /, '').replace(/;\s*$/, ''))).length;
+})();
 const { check, failures, finish } = createChecker();
 
 /** 等页面样式表真正生效，避免量到未应用样式的中间态 */
@@ -49,74 +68,39 @@ async function waitStyled(b) {
     }))()`);
 
     check('标题包含站点名', home.title.includes('NZ Road Code'), home.title);
-    check('首屏主标题是「咖啡开车车」', home.h1.trim() === '咖啡开车车', home.h1);
+    check('首屏主标题提到理论学习和模拟考试', /理论学习和模拟考试/.test(home.h1), home.h1);
     check('8 个分类卡片', home.cats === 8, 'got ' + home.cats);
     check('4 种模拟考试入口', home.exams === 4, 'got ' + home.exams);
-    check('hero 统计显示 216 题', home.heroStats.some(t => t.includes('216')), JSON.stringify(home.heroStats));
+    check('hero 统计显示题库总题数', home.heroStats.some(t => t.includes(String(TOTAL_QUESTIONS))), JSON.stringify(home.heroStats));
     check('页面有自绘 SVG', home.svgs > 5, 'got ' + home.svgs);
     check('没有 iframe（原站的广告位就是 iframe）', home.iframes === 0, 'got ' + home.iframes);
-    check('图片全部来自本站（无外链、无追踪像素）',
-      home.imgs.length > 0 && home.imgs.every(s => s.includes('/assets/')),
-      JSON.stringify(home.imgs));
+    check('没有外部图片（图示全部自绘，无外链、无追踪像素）',
+      home.imgs.every(s => s.includes('/assets/')), JSON.stringify(home.imgs));
     check('没有第三方脚本', home.scriptSrcs.every(s => s.includes('/assets/')), JSON.stringify(home.scriptSrcs));
     check('没有指向广告/翻译服务的链接',
       !home.links.some(h => /advertis|revive|googletagmanager|translation|motorbike|truck|tourist|kannz/i.test(h || '')),
       JSON.stringify(home.links.filter(h => /advertis|revive|googletagmanager|translation|motorbike|truck|tourist|kannz/i.test(h || ''))));
 
-    /* 首屏照片：既是 LCP 元素，也是整页最容易翻车的地方 */
+    /* 首页 hero：文案 + 自绘 SVG 插画，不含任何位图 */
     const hero = await b.eval(`(() => {
-      const sec = document.querySelector('.hero-photo');
-      const pic = sec && sec.querySelector('.hero-photo-media');
-      const img = pic && pic.querySelector('img');
-      const sources = pic ? Array.from(pic.querySelectorAll('source')).map(s => s.getAttribute('type')) : [];
-      const pre = document.querySelector('link[rel="preload"][as="image"]');
-      const secRect = sec ? sec.getBoundingClientRect() : null;
-      const hdr = document.querySelector('.site-header');
-      const scrim = sec ? getComputedStyle(sec.querySelector('.hero-photo-scrim')).backgroundImage : '';
+      const sec = document.querySelector('.hero');
+      const art = sec && sec.querySelector('.hero-art');
+      const rect = sec ? sec.getBoundingClientRect() : null;
       return {
-        hasSection: !!sec,
-        hasPicture: !!pic,
-        sourceTypes: sources,
-        imgSrc: img ? img.getAttribute('src') : '',
-        imgAlt: img ? img.getAttribute('alt') : '',
-        imgComplete: img ? img.complete : false,
-        imgNatural: img ? img.naturalWidth : 0,
-        imgLoading: img ? (img.getAttribute('loading') || 'eager') : '',
-        imgPriority: img ? (img.getAttribute('fetchpriority') || '') : '',
-        imgObjectFit: img ? getComputedStyle(img).objectFit : '',
-        // 实际下载的是哪一个候选（avif 生效时会落在 .avif 上）
-        currentSrc: img ? img.currentSrc.split('/').pop() : '',
-        preloadHref: pre ? (pre.getAttribute('imagesrcset') || '') : '',
-        preloadType: pre ? pre.getAttribute('type') : '',
-        sectionH: secRect ? Math.round(secRect.height) : -1,
-        headerH: hdr ? Math.round(hdr.getBoundingClientRect().height) : 0,
-        viewportH: window.innerHeight,
-        scrimHasGradient: /gradient/.test(scrim),
-        // 文案要压在图上，必须能读：取 h1 的实际颜色
-        h1Color: (() => { const h = sec && sec.querySelector('h1'); return h ? getComputedStyle(h).color : ''; })(),
-        // 首屏顶部有没有被内容撑破（横向溢出）
+        hasHero: !!sec,
+        hasArt: !!art,
+        artSvg: art ? art.querySelectorAll('svg').length : 0,
+        h1: sec ? ((sec.querySelector('h1') || {}).textContent || '') : '',
+        heroH: rect ? Math.round(rect.height) : -1,
+        imgs: Array.from(document.images).length,
         overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
       };
     })()`);
 
-    check('首屏是一整块照片 hero', hero.hasSection && hero.hasPicture);
-    check('首屏图已成功加载', hero.imgComplete && hero.imgNatural > 0,
-      'complete=' + hero.imgComplete + ' naturalWidth=' + hero.imgNatural);
-    check('首屏图按 cover 铺满', hero.imgObjectFit === 'cover', hero.imgObjectFit);
-    check('首屏图有描述性 alt', hero.imgAlt.length > 15, hero.imgAlt);
-    check('首屏图没有被 lazy 拖慢', hero.imgLoading === 'eager' && hero.imgPriority === 'high',
-      'loading=' + hero.imgLoading + ' fetchpriority=' + hero.imgPriority);
-    check('首屏图提供了 avif + webp 两种源',
-      hero.sourceTypes.includes('image/avif') && hero.sourceTypes.includes('image/webp'),
-      JSON.stringify(hero.sourceTypes));
-    // ⚠️ 这两条正则在 Node 侧执行（不在 b.eval 的模板字符串里），所以是单反斜杠
-    check('浏览器真的用上了现代格式', /\.(avif|webp)$/.test(hero.currentSrc), hero.currentSrc);
-    check('有 preload 抢 LCP 优先级', hero.preloadType === 'image/avif' && hero.preloadHref.includes('hero-1140.avif'),
-      hero.preloadType + ' | ' + hero.preloadHref);
-    check('首屏高度至少撑满一屏', hero.sectionH >= hero.viewportH - hero.headerH - 2,
-      'hero=' + hero.sectionH + ' 可用=' + (hero.viewportH - hero.headerH));
-    check('首屏有压暗层保证文字可读', hero.scrimHasGradient);
-    check('首屏标题是白字', /^rgb\(255, 255, 255\)$/.test(hero.h1Color), hero.h1Color);
+    check('首屏是 hero 区块', hero.hasHero);
+    check('首屏有自绘 SVG 插画', hero.hasArt && hero.artSvg === 1, 'svg=' + hero.artSvg);
+    check('首屏标题提到理论学习和模拟考试', /理论学习和模拟考试/.test(hero.h1), hero.h1);
+    check('首页没有任何位图（图示全部自绘）', hero.imgs === 0, 'imgs=' + hero.imgs);
     check('首页无横向溢出', hero.overflow <= 1, 'overflow=' + hero.overflow);
 
     await b.shot('tests/shots/01-home.png');
@@ -130,7 +114,7 @@ async function waitStyled(b) {
       cats: document.querySelectorAll('.cat-card').length,
       thumbs: document.querySelectorAll('.q-list .thumb svg').length
     }))()`);
-    check('列出全部 216 道题', study.qLinks === 216, 'got ' + study.qLinks);
+    check('列出全部题目', study.qLinks === TOTAL_QUESTIONS, 'got ' + study.qLinks);
     check('8 个分类卡片', study.cats === 8, 'got ' + study.cats);
     check('图示缩略图已渲染', study.thumbs > 20, 'got ' + study.thumbs);
     await b.shot('tests/shots/02-study.png');
@@ -146,9 +130,9 @@ async function waitStyled(b) {
       thumbs: document.querySelectorAll('.q-list .thumb svg').length
     }))()`);
     check('分类标题正确', cat.h1.includes('道路标识'), cat.h1);
-    check('道路标识共 30 题', cat.list === 30, 'got ' + cat.list);
+    check('道路标识题目数与 data/ 一致', cat.list === loadCat('sign').questions.length, 'got ' + cat.list);
     check('有进入逐题学习的入口', cat.practice);
-    check('30 个标志缩略图全部渲染', cat.thumbs === 30, 'got ' + cat.thumbs);
+    check('每个标志题都渲染出缩略图', cat.thumbs === loadCat('sign').questions.length, 'got ' + cat.thumbs);
     await b.shot('tests/shots/03-category.png');
 
     /* ---------------- 4. 单题页 ---------------- */
@@ -188,7 +172,7 @@ async function waitStyled(b) {
       };
     })()`);
     check('交互应用已挂载', s0.mounted);
-    check('显示第 1 题 / 共 28 题', s0.count.includes('第 1 题') && s0.count.includes('28'), s0.count);
+    check('显示第 1 题 / 共全部题数', s0.count.includes('第 1 题') && s0.count.includes(String(loadCat('core').questions.length)), s0.count);
     check('初始有 4 个可点选项', s0.opts === 4, 'got ' + s0.opts);
     check('未作答时没有反馈框', s0.feedback === 0, 'got ' + s0.feedback);
 
@@ -335,8 +319,8 @@ async function waitStyled(b) {
       imgs: Object.keys(window.RC_IMAGES).length
     }))()`);
     check('前端题库 8 个分类', bank.cats === 8, 'got ' + bank.cats);
-    check('前端题库共 216 题', bank.total === 216, 'got ' + bank.total);
-    check('图示库含 34 个图形', bank.imgs === 34, 'got ' + bank.imgs);
+    check('前端题库题数与 data/ 一致', bank.total === TOTAL_QUESTIONS, 'got ' + bank.total);
+    check('图示库与构建产物一致', bank.imgs === IMG_COUNT, 'got ' + bank.imgs + ' 期望 ' + IMG_COUNT);
 
     /* ---------------- 9. 移动端 H5（390×844） ---------------- */
     console.log('\n[9] 移动端 H5 首页 / 底部标签栏');
@@ -398,35 +382,20 @@ async function waitStyled(b) {
     check('移动端顶栏导航让位给标签栏', m0.navDisplay === 'none', m0.navDisplay);
     check('移动端分类卡片完整', m0.cards === 8, 'got ' + m0.cards);
 
-    // 首屏在移动端要正好一屏：顶栏 + hero + 标签栏 = 100svh
+    // 移动端首屏：文案 + 自绘插画，插画不能把页面撑宽
     const mHero = await b.eval(`(() => {
-      const sec = document.querySelector('.hero-photo');
-      const img = sec.querySelector('.hero-photo-media img');
-      const hdr = document.querySelector('.site-header');
-      const tb = document.querySelector('.tabbar');
+      const sec = document.querySelector('.hero');
+      const art = sec.querySelector('.hero-art');
       const secRect = sec.getBoundingClientRect();
-      const hdrH = Math.round(hdr.getBoundingClientRect().height);
-      const tbH = Math.round(tb.getBoundingClientRect().height);
       return {
         sectionH: Math.round(secRect.height),
-        sectionTop: Math.round(secRect.top),
-        headerH: hdrH,
-        tabbarH: tbH,
-        viewportH: window.innerHeight,
-        currentSrc: img.currentSrc.split('/').pop(),
-        naturalW: img.naturalWidth,
-        // 图片下边缘是否被标签栏盖住（hero 底边应正好在标签栏上沿）
-        heroBottom: Math.round(secRect.bottom),
-        tabbarTop: Math.round(tb.getBoundingClientRect().top)
+        hasArt: !!art,
+        artW: art ? Math.round(art.getBoundingClientRect().width) : 0,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
       };
     })()`);
-    check('移动端首屏正好一屏（顶栏+hero+标签栏）',
-      mHero.sectionH >= mHero.viewportH - mHero.headerH - mHero.tabbarH - 2,
-      'hero=' + mHero.sectionH + ' 可用=' + (mHero.viewportH - mHero.headerH - mHero.tabbarH));
-    check('首屏底边不被标签栏压住', mHero.heroBottom <= mHero.tabbarTop + 1,
-      'heroBottom=' + mHero.heroBottom + ' tabbarTop=' + mHero.tabbarTop);
-    check('移动端下载的是 800 档图片（2× 屏需要 780px，720 档会被跳过）',
-      mHero.currentSrc.includes('hero-800'), mHero.currentSrc + ' naturalW=' + mHero.naturalW);
+    check('移动端首屏有自绘插画', mHero.hasArt && mHero.artW > 0, 'artW=' + mHero.artW);
+    check('移动端首屏无横向溢出', mHero.overflow <= 1, 'overflow=' + mHero.overflow);
 
     await b.shot('tests/shots/07-mobile.png');
 

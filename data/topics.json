@@ -1,0 +1,76 @@
+{
+  "source": "https://www.nzta.govt.nz/driving-skills/learn-to-drive/roadcode/theory-test-questions",
+  "retrievedAt": "2026-10-05",
+  "note": [
+    "新西兰小型汽车（Class 1）理论考试考纲。",
+    "知识点取自 NZTA 官方 road code：官方每道练习题下面都链到一个 road code 章节，",
+    "把这些链接去重后得到 46 个知识点 —— 这是『有没有遗漏』的判定依据，比题目数量可靠。",
+    "",
+    "官方公布题量（2026-10-05 实测）：",
+    "  general 七类共 199 题 —— core 41 / parking 11 / emergency 10 / signs and markings 41 /",
+    "                            road position 7 / behaviour 40 / intersection 49",
+    "  car specialist 27 题",
+    "  合计 226 题。官方原文说明这只是『most of the test questions』，真实题库更大。",
+    "",
+    "category 字段 = 该知识点在本站题库里的归属分类（本站 8 个分类沿用原站划分）。",
+    "一个知识点只归一个主分类；跨分类的题目在题库里用 topic 指向这里。"
+  ],
+  "topics": [
+    { "id": "licensing-system", "path": "about-driver-licences/new-zealands-driver-licensing-system", "name": "新西兰驾照制度", "category": "theory" },
+    { "id": "learner-licence", "path": "about-driver-licences/stage-1-learner-licence", "name": "学习驾照（Learner）条件", "category": "theory" },
+    { "id": "restricted-licence", "path": "about-driver-licences/stage-2-restricted-licence", "name": "限制驾照（Restricted）条件", "category": "theory" },
+
+    { "id": "responsible-driving", "path": "about-driver-responsibility/responsible-driving", "name": "驾驶员责任", "category": "theory" },
+    { "id": "crashes", "path": "about-driver-responsibility/crashes", "name": "事故处理与报告", "category": "emergencies" },
+    { "id": "breakdowns", "path": "about-driver-responsibility/breakdowns", "name": "车辆抛锚", "category": "emergencies" },
+    { "id": "seatbelts", "path": "about-driver-responsibility/safety-belts-and-child-restraints", "name": "安全带与儿童约束", "category": "theory" },
+
+    { "id": "give-way-rules", "path": "about-driving/giving-way/the-give-way-rules", "name": "路口让行规则", "category": "intersection" },
+    { "id": "what-is-intersection", "path": "about-driving/giving-way/what-is-an-intersection", "name": "路口的定义", "category": "core" },
+    { "id": "approaching-intersection", "path": "about-driving/giving-way/driving-up-to-an-intersection", "name": "接近与通过路口", "category": "intersection" },
+    { "id": "roundabouts", "path": "about-driving/giving-way/giving-way-at-roundabouts", "name": "环岛通行与让行", "category": "intersection" },
+    { "id": "railway-crossings", "path": "about-driving/giving-way/giving-way-at-railway-level-crossings", "name": "铁路道口", "category": "intersection" },
+    { "id": "one-lane-bridges", "path": "about-driving/giving-way/giving-way-on-one-lane-bridges", "name": "单车道桥让行", "category": "intersection" },
+
+    { "id": "keeping-left", "path": "about-driving/key-driving-skills/keeping-left", "name": "靠左行驶与道路定义", "category": "core" },
+    { "id": "following-distance", "path": "about-driving/key-driving-skills/following-distance", "name": "跟车距离", "category": "core" },
+    { "id": "giving-signals", "path": "about-driving/key-driving-skills/giving-signals", "name": "打转向灯", "category": "core" },
+    { "id": "other-signals", "path": "about-driving/key-driving-skills/other-signals", "name": "接收信号（警车/紧急车辆/交警指挥）", "category": "core" },
+    { "id": "passing", "path": "about-driving/key-driving-skills/passing", "name": "超车", "category": "core" },
+    { "id": "turning", "path": "about-driving/key-driving-skills/turning", "name": "转弯与驶出车道", "category": "road-position" },
+    { "id": "using-lanes", "path": "about-driving/key-driving-skills/using-lanes-correctly", "name": "正确使用车道", "category": "road-position" },
+    { "id": "merging", "path": "about-driving/key-driving-skills/merging", "name": "汇入车流", "category": "behaviour" },
+    { "id": "motorway-driving", "path": "about-driving/key-driving-skills/motorway-driving", "name": "高速公路驾驶", "category": "behaviour" },
+    { "id": "reversing", "path": "about-driving/key-driving-skills/reversing", "name": "倒车", "category": "behaviour" },
+
+    { "id": "where-not-to-park", "path": "about-driving/stopping-and-parking/where-not-to-park", "name": "禁止停车的位置", "category": "parking" },
+    { "id": "parking-signs", "path": "about-driving/stopping-and-parking/parking-signs", "name": "停车标志与标线", "category": "parking" },
+    { "id": "how-to-park-safely", "path": "about-driving/stopping-and-parking/how-to-park-safely", "name": "安全停车操作", "category": "parking" },
+    { "id": "cycle-lane-markings", "path": "about-driving/stopping-and-parking/road-markings-for-cyclists", "name": "自行车道标线", "category": "road-position" },
+
+    { "id": "night-driving", "path": "about-driving/when-conditions-change/night-driving", "name": "夜间驾驶", "category": "core" },
+    { "id": "bad-weather", "path": "about-driving/when-conditions-change/driving-in-bad-weather", "name": "恶劣天气驾驶", "category": "core" },
+    { "id": "road-surface", "path": "about-driving/when-conditions-change/road-surface", "name": "路面状况", "category": "behaviour" },
+    { "id": "roadworks", "path": "about-driving/when-conditions-change/roadworks", "name": "道路施工", "category": "sign" },
+    { "id": "sunstrike", "path": "about-driving/when-conditions-change/sunstrike", "name": "日光眩光（Sunstrike）", "category": "behaviour" },
+
+    { "id": "safe-driving-tips", "path": "about-driving/hazards-and-emergencies/safe-driving-tips", "name": "安全驾驶要领", "category": "behaviour" },
+    { "id": "multiple-hazards", "path": "about-driving/hazards-and-emergencies/multiple-hazards", "name": "多重危险判断", "category": "behaviour" },
+    { "id": "handling-emergencies", "path": "about-driving/hazards-and-emergencies/tips-for-handling-driving-emergencies", "name": "驾驶紧急情况处置", "category": "emergencies" },
+
+    { "id": "speed-limits", "path": "about-limits/speed-limits", "name": "限速", "category": "core" },
+    { "id": "alcohol-drugs", "path": "about-limits/alcohol-and-drug-limits", "name": "酒精与药物限制", "category": "core" },
+    { "id": "driver-fatigue", "path": "about-limits/driver-fatigue", "name": "驾驶疲劳", "category": "behaviour" },
+
+    { "id": "sharing-road", "path": "about-other-road-users/sharing-the-road", "name": "与其他道路使用者共享道路", "category": "core" },
+    { "id": "sharing-cyclists", "path": "about-other-road-users/sharing-the-road/sharing-the-road-with-cyclists", "name": "与骑行者共享道路", "category": "behaviour" },
+    { "id": "sharing-horses", "path": "about-other-road-users/sharing-the-road/sharing-the-road-with-horse-riders", "name": "与骑马者共享道路", "category": "core" },
+    { "id": "sharing-pedestrians", "path": "about-other-road-users/sharing-the-road/sharing-the-road-with-pedestrians", "name": "与行人共享道路", "category": "core" },
+    { "id": "moped-riders", "path": "about-other-road-users/information-for-other-road-users/information-for-moped-riders", "name": "轻便摩托车（Moped）", "category": "theory" },
+
+    { "id": "sign-types", "path": "about-signs/main-types-of-signs", "name": "标志的主要类型", "category": "sign" },
+
+    { "id": "car-requirements", "path": "about-your-vehicle/car-requirements", "name": "车辆法定要求", "category": "theory" },
+    { "id": "loading-towing", "path": "about-your-vehicle/safe-loading-and-towing-for-light-vehicles", "name": "载货与拖车", "category": "theory" }
+  ]
+}

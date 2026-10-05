@@ -8,3 +8,7 @@ tests/*-run.txt
 Thumbs.db
 .env
 .env.*
+
+# 抓官方页面留下的原始 HTML（约 5MB，随时可用 research/fetch-nzta.cjs 重抓）。
+# 只提交解析脚本和提取出的知识点清单，不提交这堆 HTML。
+research/nzta-*.html

@@ -24,12 +24,15 @@ const MUST_404 = [
   '/README.md',
   '/data/core.json',
   '/data/sign.json',
+  '/data/topics.json',
+  '/data/topic-map.json',
   '/src/app.js',
   '/src/images.mjs',
   '/src/styles.css',
-  // 首屏照片的**源图**（`_` 前缀），只该留在仓库里供重新生成用，不该上 CDN
-  '/src/img/_hero-source.jpg',
-  '/tools/make-hero-images.mjs',
+  // 抓官方资料用的研究目录 + 构建辅助脚本，属于开发过程产物，不该公开
+  '/research/fetch-nzta.cjs',
+  '/research/official-topics.json',
+  '/tools/check-coverage.cjs',
   '/tests/e2e.cjs',
   '/tests/cdp-client.cjs',
   '/node_modules/.package-lock.json',
@@ -40,10 +43,7 @@ const MUST_404 = [
 // 这些必须 200
 const MUST_200 = [
   '/', '/study/', '/exam/', '/assets/app.js', '/assets/styles.css',
-  '/sitemap.xml', '/robots.txt',
-  // 首屏照片的部署产物
-  '/assets/img/hero-640.avif', '/assets/img/hero-800.avif', '/assets/img/hero-1140.avif',
-  '/assets/img/hero-800.webp', '/assets/img/hero-1140.jpg'
+  '/sitemap.xml', '/robots.txt'
 ];
 
 (async () => {
@@ -93,10 +93,6 @@ const MUST_200 = [
     check('HTML 短缓存（发版不会拿到旧页面）', /max-age=0/.test(res.headers['/'].cache), res.headers['/'].cache);
     check('有 X-Content-Type-Options: nosniff', /nosniff/.test(res.headers['/'].nosniff), res.headers['/'].nosniff);
     check('有 X-Frame-Options', /SAMEORIGIN/.test(res.headers['/'].frame), res.headers['/'].frame);
-
-    const avif = res.headers['/assets/img/hero-800.avif'];
-    check('首屏图有长缓存', /max-age=604800/.test(avif.cache), avif.cache);
-    check('首屏图 MIME 是 image/avif', /image\/avif/.test(avif.type), avif.type);
   } catch (e) {
     console.error('异常:', e && e.stack || e);
     failures.push('脚本异常');

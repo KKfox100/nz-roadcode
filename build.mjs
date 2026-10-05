@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { signs, diagrams, renderImage, captions } from './src/images.mjs';
+import { allImages, renderImage, captions } from './src/images.mjs';
 
 /**
  * ⚠️ 环境约束：**不要在这个脚本里批量删除文件**（也不要写回 "先清空 dist 再重建"）。
@@ -116,7 +116,7 @@ const categories = CATEGORY_ORDER.map(id => {
     if (!q.explanation || !q.explanation.trim()) {
       throw new Error(`${id} 第 ${i + 1} 题缺少解析`);
     }
-    if (q.image && !(q.image in signs) && !(q.image in diagrams)) {
+    if (q.image && !(q.image in allImages)) {
       throw new Error(`${id} 第 ${i + 1} 题引用了不存在的图示：${q.image}`);
     }
   });
@@ -270,75 +270,27 @@ function page(relPath, html) {
 
 /* ---------- 首页 ---------- */
 
-/**
- * 首屏照片。
- *
- * 源图 1140×1920（9:16 竖构图），用 tools/make-hero-images.mjs 生成
- * 640 / 800 / 1140 三档宽度的 avif + webp，外加一张 jpeg 兜底。
- * 体积：源图 277KB → 1140 avif 75KB / 800 avif 47KB。
- * 首屏用 sizes="100vw"，浏览器按「视口宽 × DPR」自选：
- * 2× 手机拿 800（47KB），1× 桌面拿 1140。
- *
- * 注意 src/img/ 里以 `_` 开头的源图不参与部署（见 buildAssets）。
- */
-const HERO = {
-  widths: [640, 800, 1140],
-  alt: '一只戴着墨镜的约克夏犬坐在红色敞篷车的驾驶座上，前爪搭在车门上，'
-     + '背景是黄昏的海岸公路、帆船和远处的天空塔',
-};
-
-function heroSrcset(depth, fmt) {
-  const r = rel(depth);
-  return HERO.widths.map(w => `${r}assets/img/hero-${w}.${fmt} ${w}w`).join(', ');
-}
-
-/** 首屏图片。avif → webp → jpeg 逐级降级，第一屏用 fetchpriority 抢优先级。 */
-function heroPicture(depth) {
-  const r = rel(depth);
-  const fallback = HERO.widths[HERO.widths.length - 1];
-  return `<picture class="hero-photo-media">
-      <source type="image/avif" srcset="${heroSrcset(depth, 'avif')}" sizes="100vw">
-      <source type="image/webp" srcset="${heroSrcset(depth, 'webp')}" sizes="100vw">
-      <img src="${r}assets/img/hero-${fallback}.jpg" alt="${esc(HERO.alt)}"
-           width="1140" height="1920" fetchpriority="high" decoding="async">
-    </picture>`;
-}
-
-/**
- * 首屏图片的 preload。
- *
- * 首屏照片就是 LCP 元素，靠 HTML 解析到 <picture> 才开始下载太晚
- * （CSS 会阻塞渲染）。preload 让它在解析 <head> 时就发起请求。
- * imagesrcset / imagesizes 必须和 <picture> 里写的完全一致，
- * 否则浏览器会当成两张不同的图，反而下两次。
- */
-function heroPreload(depth) {
-  return `<link rel="preload" as="image" type="image/avif"
-        imagesrcset="${heroSrcset(depth, 'avif')}" imagesizes="100vw" fetchpriority="high">`;
-}
-
 function buildHome() {
   const depth = 0;
   const body = `
-<section class="hero-photo">
-  ${heroPicture(depth)}
-  <div class="hero-photo-scrim" aria-hidden="true"></div>
-  <div class="wrap hero-photo-inner">
-    <div class="hero-photo-copy">
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
       <span class="pill">新西兰驾照理论考试 · 中文题库</span>
-      <h1>咖啡开车车</h1>
-      <p class="hero-lede">新西兰交规理论学习和模拟考试 —— 按官方道路规则整理的 8 个学习分类、共 ${TOTAL_QUESTIONS} 道中文试题。逐题即时判分、每题都有解析，配合四种题量的模拟考试，帮你把规则真正弄懂，而不是死记答案。</p>
+      <h1>新西兰交规<br><em>理论学习和模拟考试</em></h1>
+      <p class="hero-lede">按新西兰官方道路规则整理的 8 个学习分类、共 ${TOTAL_QUESTIONS} 道中文试题。逐题即时判分、每题都有解析，配合四种题量的模拟考试，帮你把规则真正弄懂，而不是死记答案。</p>
       <div class="hero-actions">
         <a class="btn btn-primary btn-lg" href="exam/35/">开始正式考试模拟</a>
         <a class="btn btn-ghost btn-lg" href="study/">分类理论学习</a>
       </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><b>${TOTAL_QUESTIONS}</b><span>道原创试题</span></div>
+        <div class="hero-stat"><b>8</b><span>个知识分类</span></div>
+        <div class="hero-stat"><b>4</b><span>种模拟题量</span></div>
+        <div class="hero-stat"><b>0</b><span>广告与追踪</span></div>
+      </div>
     </div>
-    <div class="hero-stats">
-      <div class="hero-stat"><b>${TOTAL_QUESTIONS}</b><span>道原创试题</span></div>
-      <div class="hero-stat"><b>8</b><span>个知识分类</span></div>
-      <div class="hero-stat"><b>4</b><span>种模拟题量</span></div>
-      <div class="hero-stat"><b>0</b><span>广告与追踪</span></div>
-    </div>
+    <div class="hero-art">${questionFigure({ image: 'sv-crossroads' }, true)}</div>
   </div>
 </section>
 
@@ -406,7 +358,7 @@ function buildHome() {
     depth,
     nav: 'home',
     body,
-    head: heroPreload(depth) + `\n<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
+    head: `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
   }));
 }
 
@@ -688,21 +640,9 @@ function buildAssets() {
   copyOut(join(DIST, 'assets', 'styles.css'), join(ROOT, 'src', 'styles.css'));
   copyOut(join(DIST, 'assets', 'app.js'), join(ROOT, 'src', 'app.js'));
 
-  // 位图资源（首屏照片的多尺寸/多格式版本）。
-  // 以 `_` 开头的文件是**源图**，只留在仓库里供 tools/make-hero-images.mjs
-  // 重新生成用，不参与部署 —— 省得把 277KB 的原图也传上 CDN。
-  const imgSrc = join(ROOT, 'src', 'img');
-  if (existsSync(imgSrc)) {
-    for (const name of readdirSync(imgSrc)) {
-      if (name.startsWith('_')) continue;
-      copyOut(join(DIST, 'assets', 'img', name), join(imgSrc, name));
-    }
-  }
-
-  // 图示库：key -> SVG 字符串
+  // 图示库：key -> SVG 字符串（标志牌 + 路口场景 + 道路标线）
   const imgMap = {};
-  Object.keys(signs).forEach(k => { imgMap[k] = signs[k](); });
-  Object.keys(diagrams).forEach(k => { imgMap[k] = diagrams[k](); });
+  Object.keys(allImages).forEach(k => { imgMap[k] = allImages[k](); });
   writeOut(join(DIST, 'assets', 'images.js'),
     '/* 自绘 SVG 图示库（构建产物，请勿手改） */\n'
     + 'window.RC_IMAGES = ' + JSON.stringify(imgMap) + ';\n'
@@ -800,12 +740,49 @@ build.mjs
 
 /* ---------- 主流程 ---------- */
 
+/**
+ * 官方考纲覆盖度校验 —— 构建的硬性门禁。
+ *
+ * data/topics.json 是从 NZTA 官方 road code 提取的 46 个知识点（考纲）。
+ * 这里检查每个知识点在题库里是否至少有一道题；有遗漏就直接让构建失败。
+ *
+ * 为什么要做成门禁：题目数量看着够，不代表考点没漏 —— 之前 216 题里有
+ * 9 个知识点一题都没有（倒车、日光眩光、单车道桥……），纯靠人肉是发现不了的。
+ */
+function checkCoverage() {
+  const topics = JSON.parse(readFileSync(join(ROOT, 'data', 'topics.json'), 'utf8')).topics;
+  const mapPath = join(ROOT, 'data', 'topic-map.json');
+  const topicMap = existsSync(mapPath) ? JSON.parse(readFileSync(mapPath, 'utf8')) : {};
+
+  const count = new Map();
+  for (const q of ALL_QUESTIONS) {
+    // 题目自带的 topic 优先（新补的题直接标注），否则回落到 topic-map.json
+    const t = q.topic || topicMap[q.id];
+    if (t) count.set(t, (count.get(t) || 0) + 1);
+  }
+
+  const missing = topics.filter(t => !count.get(t.id));
+  const thin = topics.filter(t => count.get(t.id) === 1);
+  const covered = topics.length - missing.length;
+
+  console.log(`  考纲覆盖：${covered}/${topics.length} 个官方知识点有题` +
+    (thin.length ? `（其中 ${thin.length} 个仅 1 题：${thin.map(t => t.name).join('、')}）` : ''));
+
+  if (missing.length) {
+    throw new Error(
+      `有 ${missing.length} 个官方知识点在题库里没有任何题目，构建中止：\n`
+      + missing.map(t => `    · ${t.name}（${t.category} · ${t.path}）`).join('\n')
+    );
+  }
+}
+
 function main() {
   const t0 = Date.now();
 
   // 不清空 dist：同名文件原地覆盖，收尾只删遗留文件。原因见 emptyDir / pruneStale。
   mkdirSync(join(DIST, 'assets'), { recursive: true });
 
+  checkCoverage();
   buildAssets();
   buildHome();
   buildStudyIndex();
