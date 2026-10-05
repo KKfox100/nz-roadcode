@@ -81,6 +81,8 @@
   --maxw: 1080px;
   --tap: 44px;
   --tabbar-h: 60px;
+  /* 顶栏高度。首屏 hero 要用它算「一屏正好装下」，改顶栏高度时同步改这里。 */
+  --header-h: 56px;
   --ease: cubic-bezier(.4, 0, .2, 1);
 }
 
@@ -158,11 +160,17 @@ p:last-child { margin-bottom: 0; }
   background: rgba(250, 248, 246, .88);
   backdrop-filter: saturate(160%) blur(14px);
   -webkit-backdrop-filter: saturate(160%) blur(14px);
-  border-bottom: 1px solid var(--line);
+  /* ⚠️ 分隔线用 box-shadow 而不是 border-bottom。
+     border 会算进盒模型，高度就比 --header-h 多 1px，而首屏 hero 是
+     用「100svh - 顶栏 - 标签栏」算出来的 —— 差 1px 就会让首屏压住标签栏。
+     box-shadow 不参与布局，高度可控。同理见 .tabbar。 */
+  box-shadow: 0 1px 0 var(--line);
 }
 .site-header .wrap {
   display: flex; align-items: center; gap: var(--sp-3);
-  min-height: 56px; padding-top: var(--sp-2); padding-bottom: var(--sp-2);
+  /* 高度由令牌决定，别再靠 min-height + 上下 padding 拼 —— 那样一旦
+     .brand 的触摸目标尺寸变了，实际高度就会跟着漂。 */
+  min-height: var(--header-h);
 }
 
 .brand {
@@ -225,7 +233,9 @@ p:last-child { margin-bottom: 0; }
   background: rgba(252, 251, 250, .94);
   backdrop-filter: saturate(160%) blur(14px);
   -webkit-backdrop-filter: saturate(160%) blur(14px);
-  border-top: 1px solid var(--line);
+  /* 同 .site-header：用 box-shadow 画分隔线，让实际高度正好等于
+     --tabbar-h + 安全区，首屏 hero 的高度计算才准。 */
+  box-shadow: 0 -1px 0 var(--line);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .tabbar a {
@@ -312,19 +322,98 @@ body.is-focus .tabbar { display: none; }
 .notice b { color: #5f4920; }
 
 /* ==========================================================================
-   7. 首页 hero
+   7. 首页首屏（全屏照片 hero）
+
+   照片是 9:16 竖构图，主体（狗）在源图 **57%~83%** 高度处，车占了下半部分。
+   这决定了两种完全不同的排法：
+
+   · 手机竖屏 —— 9:16 的图正好铺满，纵向不裁切，整张图（含天空塔）都在。
+     狗落在画面中段，文案压**底部**，正好压在车身和座椅上，不碰狗脸。
+
+   · 平板 / 桌面 —— 视口比图宽，cover 必然纵向裁切（1440×886 时只剩 36%）。
+     裁切后狗必然落在**下半部分**，所以文案改压**顶部**，压在远处的海面和
+     公路上。这条是实测出来的：一开始文案在底部 + 取景框偏上，结果狗被整个
+     裁掉，首屏只剩海景。
    ========================================================================== */
 
-.hero {
-  padding: var(--sp-6) 0 var(--sp-8);
-  background:
-    radial-gradient(760px 300px at 8% -12%, #e4edeb 0%, rgba(228, 237, 235, 0) 64%),
-    radial-gradient(680px 280px at 96% -6%, #efe8f1 0%, rgba(239, 232, 241, 0) 60%);
-  border-bottom: 1px solid var(--line);
+.hero-photo {
+  position: relative;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  overflow: hidden;
+  background: #2b2422;                  /* 图片加载前的兜底底色，避免白闪 */
+  /* 首屏正好一屏：顶栏 + hero + 底部标签栏 = 100svh */
+  min-height: calc(100vh - var(--header-h) - var(--tabbar-h) - env(safe-area-inset-bottom));
+  min-height: calc(100svh - var(--header-h) - var(--tabbar-h) - env(safe-area-inset-bottom));
 }
-.hero-grid { display: grid; gap: var(--sp-6); align-items: center; }
-.hero h1 { margin-bottom: .4em; font-size: 1.75rem; }
-.hero h1 em { font-style: normal; color: var(--brand-deep); }
+
+.hero-photo-media { position: absolute; inset: 0; display: block; }
+.hero-photo-media img {
+  display: block; width: 100%; height: 100%;
+  object-fit: cover; object-position: center 50%;
+}
+
+/* 压暗层：文案区最重，向上快速淡出，把主体留在干净区。
+   手机端文案在底部 → 从下往上；宽屏文案在顶部 → 从上往下。 */
+.hero-photo-scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top,
+    rgba(30, 23, 20, .90) 0%,
+    rgba(30, 23, 20, .66) 26%,
+    rgba(30, 23, 20, .22) 50%,
+    rgba(30, 23, 20, 0) 72%);
+}
+
+.hero-photo-inner {
+  position: relative; z-index: 1;
+  padding-top: var(--sp-10);
+  padding-bottom: var(--sp-6);
+  color: #fff;
+}
+
+.hero-photo .pill {
+  /* 半透明白底 + 白字在浅色天空上读不出来；这里改成不透明度够高的深底，
+     保证不管压在夕阳、海面还是狗身上，白字都有足够对比度。 */
+  background: rgba(30, 23, 20, .62);
+  border-color: rgba(255, 255, 255, .26);
+  color: #fff;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.hero-photo h1 {
+  margin: 0 0 .28em;
+  font-size: clamp(2.1rem, 9vw, 3.2rem);
+  line-height: 1.08;
+  letter-spacing: .01em;
+  color: #fff;
+  text-shadow: 0 2px 18px rgba(24, 18, 15, .38);
+}
+
+.hero-photo .hero-lede {
+  color: rgba(255, 255, 255, .84);
+  max-width: 52ch;
+  text-shadow: 0 1px 10px rgba(24, 18, 15, .30);
+}
+
+/* 照片上的按钮要自带足够的对比度，不能沿用浅底样式 */
+.hero-photo .btn-ghost {
+  background: rgba(255, 255, 255, .12);
+  border-color: rgba(255, 255, 255, .42);
+  color: #fff;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.hero-photo .btn-primary { box-shadow: 0 6px 20px rgba(24, 18, 15, .30); }
+
+.hero-photo .hero-stats { margin-top: var(--sp-6); }
+.hero-photo .hero-stat {
+  /* 同上：半透明白底在狗的浅色毛发上会让白字糊掉，改用深底 */
+  background: rgba(30, 23, 20, .46);
+  border-color: rgba(255, 255, 255, .20);
+}
+.hero-photo .hero-stat b { color: #fff; }
+.hero-photo .hero-stat span { color: rgba(255, 255, 255, .78); }
+
 .hero-lede { font-size: 1rem; color: var(--ink-2); max-width: 46ch; }
 .hero-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-5); }
 .hero-actions .btn { flex: 1 1 auto; }
@@ -345,12 +434,29 @@ body.is-focus .tabbar { display: none; }
 }
 .hero-stat span { font-size: .76rem; color: var(--ink-3); }
 
-.hero-art {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--r-xl); box-shadow: var(--sh-lg);
-  padding: var(--sp-4);
+/* 宽屏：视口比图宽，cover 会纵向裁切，狗必然落在下半部分 ——
+   文案改压顶部，压暗层方向跟着翻转。
+
+   光翻转还不够：文案块一旦占掉首屏一半以上高度，狗的下巴就会被画面下沿切掉。
+   所以宽屏下把 .hero-photo-inner 变成 space-between 的两段 ——
+   标题区贴顶、数据条沉底，标题区因此只占约 1/3，给狗留出完整空间。 */
+@media (min-width: 640px) {
+  .hero-photo { justify-content: flex-start; }
+  .hero-photo-inner {
+    flex: 1 1 auto;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding-top: var(--sp-8);
+    padding-bottom: var(--sp-6);
+  }
+  .hero-photo-media img { object-position: center 67%; }
+  .hero-photo-scrim {
+    background: linear-gradient(to bottom,
+      rgba(30, 23, 20, .92) 0%,
+      rgba(30, 23, 20, .74) 30%,
+      rgba(30, 23, 20, .28) 56%,
+      rgba(30, 23, 20, 0) 78%);
+  }
 }
-.hero-art svg { display: block; border-radius: var(--r-md); }
 
 /* ==========================================================================
    8. 区块
@@ -507,9 +613,6 @@ body.is-focus .tabbar { display: none; }
   border-top: 1px dashed var(--line-strong);
   font-size: .79rem; color: var(--ink-3); text-align: center; line-height: 1.6;
 }
-.hero-art .q-figure {
-  margin: 0; padding: 0; background: none; border: 0; max-width: none;
-}
 
 .opts { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 
@@ -664,22 +767,24 @@ body.is-focus .tabbar { display: none; }
   .grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .hero-stats { grid-template-columns: repeat(4, 1fr); }
   .result-grid { grid-template-columns: repeat(4, 1fr); }
-  .hero h1 { font-size: 2.1rem; }
   .hero-actions .btn { flex: 0 0 auto; }
   .quiz-actions .btn { flex: 0 0 auto; }
   .site-footer .wrap { flex-direction: row; align-items: center; justify-content: space-between; }
 }
 
 @media (min-width: 900px) {
-  .site-header .wrap { min-height: 64px; }
+  :root { --header-h: 64px; }
   .site-nav { display: flex; }
   .tabbar { display: none; }
-  .hero { padding: var(--sp-10) 0; }
-  .hero-grid { grid-template-columns: 1.3fr 1fr; gap: var(--sp-10); }
-  .hero h1 { font-size: 2.5rem; }
+  /* 桌面端没有底部标签栏，首屏就是一屏减顶栏 */
+  .hero-photo {
+    min-height: calc(100vh - var(--header-h));
+    min-height: calc(100svh - var(--header-h));
+  }
+  .hero-photo-inner { padding-bottom: var(--sp-8); }
   .hero-lede { font-size: 1.05rem; }
   .section { padding: var(--sp-10) 0; }
-  .quiz-bar { top: 64px; }
+  .quiz-bar { top: var(--header-h); }
   .q-figure { max-width: 300px; }
   .q-figure.wide { max-width: 460px; }
   .q-card { padding: var(--sp-6); }

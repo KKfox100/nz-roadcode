@@ -22,8 +22,9 @@
 （Land Transport (Road User) Rule 2004 / NZ Road Code），
 不是从任何第三方题库复制而来。
 
-站内所有道路标志与路口示意图均为**自绘 SVG**（见 `src/images.mjs`），
-不使用任何外部图片素材，因此全站没有任何图片请求。
+站内所有道路标志与路口示意图均为**自绘 SVG**（见 `src/images.mjs`）。
+唯一的位图是首页首屏那张照片，也放在仓库里（`src/img/`），构建时转成
+avif / webp / jpeg 三档 —— **全站没有任何指向外部域名的资源请求**。
 
 ### 免责声明
 
@@ -62,21 +63,56 @@ data/*.json        题库（8 个文件，每个分类一个）
 src/images.mjs     自绘 SVG 图示库：30 个道路标志 + 4 个路口场景
 src/styles.css     样式表（手写，无框架；莫兰迪设计令牌 + H5 布局）
 src/app.js         前端交互：逐题学习 + 模拟考试
+src/img/           首页首屏照片：源图（_ 前缀，不部署）+ 各档位 avif/webp/jpeg
+tools/             一次性脚本：make-hero-images.mjs 生成首屏图各档位
 build.mjs          构建脚本：把题库渲染成静态站点到 dist/
 dist/              构建产物（= Cloudflare 静态资源目录，已 gitignore）
-tests/e2e.cjs      端到端测试（真实 Chrome + CDP，121 项断言）
+tests/e2e.cjs      端到端测试（真实 Chrome + CDP，133 项断言）
 wrangler.jsonc     Cloudflare Workers 部署配置
 ```
 
 构建期就把每一道题渲染成了真实 HTML（含 JSON-LD 结构化数据），
 所以搜索引擎能收录全部 216 个题目页；`app.js` 只是渐进增强。
 
+### 首页首屏照片（LCP 优化）
+
+首页是一整块**全屏照片 hero**：照片铺满首屏，标题「咖啡开车车」叠在图上。
+
+- 源图是 **9:16 竖构图**（1140×1920）。首屏用 `object-fit: cover` 裁切，
+  所以「源图的哪一段被看到」完全由 `object-position` 决定 —— 换图时必须
+  重新量主体位置。当前这张的主体（狗脸）在源图 **57%~83%** 高度处，
+  因此宽屏设 `object-position: center 67%`，移动端视口本身就接近竖构图、
+  纵向几乎不裁切，用默认的 `center 50%` 即可
+- 输出 **3 档宽度：640 / 800 / 1140**。选这三档是量出来的，不是拍的：
+  1× 手机（390 CSS px）需要 640；2× 手机需要 780 —— 只给 720 会因差 60px
+  跳到 1140 档、白多下 30KB，所以第二档取 800；1× 桌面 1440 取 1140
+- 每档都给 **avif / webp / jpeg** 三种格式，用 `<picture>` 做降级链，
+  最窄的 jpeg 兜底。桌面端 avif 只有 75KB（原 jpeg 212KB）
+- `<link rel="preload" as="image" imagesrcset=... imagesizes=...>` 抢 LCP 优先级 ——
+  **preload 的 `imagesrcset`/`imagesizes` 必须和 `<picture>` 里的完全一致**，
+  否则浏览器会当成两张不同的图、把首屏图下载两遍
+- `<img>` 显式写 `width="1140" height="1920"` 防止 CLS，配 `fetchpriority="high"`
+- 首屏文案区有一层**从下往上的渐变压暗层**保证文字可读；宽屏改成从上往下压暗，
+  并把文案排成「标题贴顶 + 数据条沉底」两段 —— 实测文案块占满 54% 时会把狗
+  挤出画面，改 `space-between` 后压到 37%，狗脸完整
+- 图片生成脚本 `tools/make-hero-images.mjs` 是**手动运行**的，不进构建流程
+  （构建只做拷贝）。换图时：
+
+  ```bash
+  cp 新图.jpg src/img/_hero-source.jpg
+  NODE_PATH="C:/Users/jack/.workbuddy-ai/binaries/node/workspace/node_modules" \
+    node tools/make-hero-images.mjs
+  npm run build
+  ```
+
+  源图带 `_` 前缀，构建时会被跳过，不会部署到线上。
+
 ### ⚠️ 构建脚本不做批量删除
 
 `build.mjs` 采用**原地覆盖 + 收尾清理遗留**，而不是「先清空 `dist/` 再重建」。
 这不是性能优化，是唯一可行的写法 —— 宿主的"安全删除"垫片会对每一次
 `unlink` 拉起一个子进程做守卫检查，并按**每一轮对话累计删除数**设了 50 的阈值，
-超了就整轮拒绝删除。本站有 250 个产物文件，先清空再重建必然失败。
+超了就整轮拒绝删除。本站有 257 个产物文件，先清空再重建必然失败。
 详见 `build.mjs` 里 `pruneStale()` 上方的注释。
 
 顺带的好处：稳态重建从 5 分 20 秒降到 **约 0.6 秒**。
@@ -122,6 +158,16 @@ npm run deploy        # = node build.mjs && wrangler deploy
 
 改 `wrangler.jsonc` 里的 `name` 会创建**新的** Worker，旧的不会自动删除。
 
+### ⚠️ 部署完别立刻跑线上 E2E
+
+`wrangler deploy` 报告成功、`Current Version ID` 也打印出来了，但 Cloudflare
+边缘节点还有几十秒的传播窗口。这期间 `BASE=... npm test` 会**拿到上一版的 HTML**：
+本次就踩到过 —— 部署后 1 秒开跑，首页断言全红（h1 还是旧文案、`.hero-photo`
+不存在），隔 2 分钟原样重跑就 133 项全绿。
+
+判断方法：拿线上 HTML 直接搜新加的标记（如 `hero-photo`），有就是边缘已就绪。
+不要因为这种假红去改代码。
+
 `build.mjs` 里的 `SITE_URL` 默认是线上真实地址，会写进 canonical / sitemap /
 og:url。换域名时改那一处，或用环境变量覆盖：
 
@@ -159,7 +205,9 @@ npm test
 
 覆盖：首页 / 理论学习总览 / 分类页 / 单题页 / 逐题学习交互 /
 模拟考试全流程（抽题 → 作答 → 交卷 → 成绩 → 逐题回顾）/
-404 状态码 / 静态资源 MIME / **移动端 H5（底部标签栏、专注模式、固定操作栏、
+404 状态码 / 静态资源 MIME / **首页首屏照片（真实加载成功、cover 铺满、
+浏览器确实选了 avif/webp、preload 与 picture 一致、撑满一屏、压暗层存在、
+白字对比度、无横向溢出）** / **移动端 H5（底部标签栏、专注模式、固定操作栏、
 44px 触摸目标、无横向溢出）** / **莫兰迪配色（分类色饱和度上限、theme-color）** /
 console 错误。
 

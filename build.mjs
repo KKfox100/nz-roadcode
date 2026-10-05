@@ -270,27 +270,75 @@ function page(relPath, html) {
 
 /* ---------- 首页 ---------- */
 
+/**
+ * 首屏照片。
+ *
+ * 源图 1140×1920（9:16 竖构图），用 tools/make-hero-images.mjs 生成
+ * 640 / 800 / 1140 三档宽度的 avif + webp，外加一张 jpeg 兜底。
+ * 体积：源图 277KB → 1140 avif 75KB / 800 avif 47KB。
+ * 首屏用 sizes="100vw"，浏览器按「视口宽 × DPR」自选：
+ * 2× 手机拿 800（47KB），1× 桌面拿 1140。
+ *
+ * 注意 src/img/ 里以 `_` 开头的源图不参与部署（见 buildAssets）。
+ */
+const HERO = {
+  widths: [640, 800, 1140],
+  alt: '一只戴着墨镜的约克夏犬坐在红色敞篷车的驾驶座上，前爪搭在车门上，'
+     + '背景是黄昏的海岸公路、帆船和远处的天空塔',
+};
+
+function heroSrcset(depth, fmt) {
+  const r = rel(depth);
+  return HERO.widths.map(w => `${r}assets/img/hero-${w}.${fmt} ${w}w`).join(', ');
+}
+
+/** 首屏图片。avif → webp → jpeg 逐级降级，第一屏用 fetchpriority 抢优先级。 */
+function heroPicture(depth) {
+  const r = rel(depth);
+  const fallback = HERO.widths[HERO.widths.length - 1];
+  return `<picture class="hero-photo-media">
+      <source type="image/avif" srcset="${heroSrcset(depth, 'avif')}" sizes="100vw">
+      <source type="image/webp" srcset="${heroSrcset(depth, 'webp')}" sizes="100vw">
+      <img src="${r}assets/img/hero-${fallback}.jpg" alt="${esc(HERO.alt)}"
+           width="1140" height="1920" fetchpriority="high" decoding="async">
+    </picture>`;
+}
+
+/**
+ * 首屏图片的 preload。
+ *
+ * 首屏照片就是 LCP 元素，靠 HTML 解析到 <picture> 才开始下载太晚
+ * （CSS 会阻塞渲染）。preload 让它在解析 <head> 时就发起请求。
+ * imagesrcset / imagesizes 必须和 <picture> 里写的完全一致，
+ * 否则浏览器会当成两张不同的图，反而下两次。
+ */
+function heroPreload(depth) {
+  return `<link rel="preload" as="image" type="image/avif"
+        imagesrcset="${heroSrcset(depth, 'avif')}" imagesizes="100vw" fetchpriority="high">`;
+}
+
 function buildHome() {
   const depth = 0;
   const body = `
-<section class="hero">
-  <div class="wrap hero-grid">
-    <div>
+<section class="hero-photo">
+  ${heroPicture(depth)}
+  <div class="hero-photo-scrim" aria-hidden="true"></div>
+  <div class="wrap hero-photo-inner">
+    <div class="hero-photo-copy">
       <span class="pill">新西兰驾照理论考试 · 中文题库</span>
-      <h1>新西兰交规<br><em>理论学习和模拟考试</em></h1>
-      <p class="hero-lede">按新西兰官方道路规则整理的 8 个学习分类、共 ${TOTAL_QUESTIONS} 道中文试题。逐题即时判分、每题都有解析，配合四种题量的模拟考试，帮你把规则真正弄懂，而不是死记答案。</p>
+      <h1>咖啡开车车</h1>
+      <p class="hero-lede">新西兰交规理论学习和模拟考试 —— 按官方道路规则整理的 8 个学习分类、共 ${TOTAL_QUESTIONS} 道中文试题。逐题即时判分、每题都有解析，配合四种题量的模拟考试，帮你把规则真正弄懂，而不是死记答案。</p>
       <div class="hero-actions">
         <a class="btn btn-primary btn-lg" href="exam/35/">开始正式考试模拟</a>
         <a class="btn btn-ghost btn-lg" href="study/">分类理论学习</a>
       </div>
-      <div class="hero-stats">
-        <div class="hero-stat"><b>${TOTAL_QUESTIONS}</b><span>道原创试题</span></div>
-        <div class="hero-stat"><b>8</b><span>个知识分类</span></div>
-        <div class="hero-stat"><b>4</b><span>种模拟题量</span></div>
-        <div class="hero-stat"><b>0</b><span>广告与追踪</span></div>
-      </div>
     </div>
-    <div class="hero-art">${questionFigure({ image: 'sv-crossroads' }, true)}</div>
+    <div class="hero-stats">
+      <div class="hero-stat"><b>${TOTAL_QUESTIONS}</b><span>道原创试题</span></div>
+      <div class="hero-stat"><b>8</b><span>个知识分类</span></div>
+      <div class="hero-stat"><b>4</b><span>种模拟题量</span></div>
+      <div class="hero-stat"><b>0</b><span>广告与追踪</span></div>
+    </div>
   </div>
 </section>
 
@@ -358,7 +406,7 @@ function buildHome() {
     depth,
     nav: 'home',
     body,
-    head: `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
+    head: heroPreload(depth) + `\n<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
   }));
 }
 
@@ -639,6 +687,17 @@ function buildAbout() {
 function buildAssets() {
   copyOut(join(DIST, 'assets', 'styles.css'), join(ROOT, 'src', 'styles.css'));
   copyOut(join(DIST, 'assets', 'app.js'), join(ROOT, 'src', 'app.js'));
+
+  // 位图资源（首屏照片的多尺寸/多格式版本）。
+  // 以 `_` 开头的文件是**源图**，只留在仓库里供 tools/make-hero-images.mjs
+  // 重新生成用，不参与部署 —— 省得把 277KB 的原图也传上 CDN。
+  const imgSrc = join(ROOT, 'src', 'img');
+  if (existsSync(imgSrc)) {
+    for (const name of readdirSync(imgSrc)) {
+      if (name.startsWith('_')) continue;
+      copyOut(join(DIST, 'assets', 'img', name), join(imgSrc, name));
+    }
+  }
 
   // 图示库：key -> SVG 字符串
   const imgMap = {};
