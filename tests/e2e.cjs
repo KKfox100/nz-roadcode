@@ -437,6 +437,42 @@ async function waitStyled(b) {
     check('前端题库题数与 data/ 一致', bank.total === TOTAL_QUESTIONS, 'got ' + bank.total);
     check('图示库与构建产物一致', bank.imgs === IMG_COUNT, 'got ' + bank.imgs + ' 期望 ' + IMG_COUNT);
 
+    /* ---------------- 8b. 让行规则族（2012 年改过，最容易写反） ----------------
+     *
+     * 为什么单独钉这几题：新西兰 2012-03-25 把「左转让右转」改成了「右转让左转」，
+     * 而网上大量中文资料（包括一些驾考站）至今还是旧规则 —— 写题时照着旧资料抄
+     * 就会把答案键写反。core-21 就是这么错的：**解析写的是新规则，答案键却是旧
+     * 规则的结论**，两者自相矛盾，而数量类断言完全挡不住。
+     *
+     * ⚠️ 下面这几条是**故意写死**的，不同于本文件其他「数量一律现算」的约定 ——
+     * 它们钉的是法规事实，本就不该随内容变化。题目若被改写，这里要一起复核。
+     */
+    console.log('\n[8b] 让行规则族（2012 年改过，最容易写反）');
+    const RULE_FACTS = [
+      ['core-20', /让右/, '无控制路口：给右侧来车让行'],
+      ['core-21', /你要让行/, '你右转 / 对向左转：右转让左转（2012 新规）'],
+      ['core-22', /对向直行/, '你右转 / 对向直行：转弯让直行'],
+      ['core-23', /支路/, 'T 型路口：支路让主路'],
+      ['intersection-04', /蓝车让行/, '蓝车右转 / 红车对向直行：蓝车让行'],
+      ['intersection-07', /对向直行/, '绿灯右转 / 对向直行：对向直行优先'],
+    ];
+    const facts = await b.eval(`(() => {
+      const want = ${JSON.stringify(RULE_FACTS.map(f => f[0]))};
+      const out = {};
+      for (const c of window.RC_BANK.categories) {
+        for (const q of c.questions) {
+          if (want.indexOf(q.id) >= 0) out[q.id] = q.options[q.answer] || '';
+        }
+      }
+      return out;
+    })()`);
+    for (const [id, re, why] of RULE_FACTS) {
+      const got = facts[id];
+      check('让行规则 ' + id + '：' + why,
+        typeof got === 'string' && re.test(got),
+        got === undefined ? '题目不存在' : '答案 = ' + got);
+    }
+
     /* ---------------- 9. 移动端 H5（390×844） ---------------- */
     console.log('\n[9] 移动端 H5 首页 / 底部标签栏');
     await b.setMobile(390, 844);
