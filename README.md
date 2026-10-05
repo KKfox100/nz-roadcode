@@ -125,3 +125,22 @@ npm test
 404 状态码 / 静态资源 MIME / 移动端横向溢出 / console 错误。
 
 截图输出在 `tests/shots/`。
+
+同一个脚本可以直接跑线上（把 `BASE` 指过去），验证部署结果：
+
+```bash
+BASE=https://nz-roadcode.2412.workers.dev npm test
+```
+
+另外 `tests/live-security.cjs` 专门验证**构建目录隔离**是否真的生效 ——
+它会逐个请求 `.git/config`、`package.json`、`data/*.json`、`src/*` 等 18 个
+不该公开的路径，全部必须返回 404；一旦有一个返回 200，说明源码或提交历史
+已经挂在公网上了：
+
+```bash
+npm run test:live
+```
+
+## 线上地址
+
+https://nz-roadcode.2412.workers.dev
