@@ -3,7 +3,7 @@
   "name": "紧急事故",
   "nameEn": "Emergencies",
   "icon": "warning",
-  "color": "#dc2626",
+  "color": "#c58c7e",
   "summary": "车坏了、车撞了、爆胎了、后面跟着消防车——学习如何冷静应对紧急情况。",
   "questions": [
     {

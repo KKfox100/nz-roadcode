@@ -3,7 +3,7 @@
   "name": "交通路口",
   "nameEn": "Intersection",
   "icon": "junction",
-  "color": "#d97706",
+  "color": "#c9a87a",
   "summary": "学习信号灯、让行标志的含义，以及在十字路口、丁字路口如何正确让行。",
   "questions": [
     {

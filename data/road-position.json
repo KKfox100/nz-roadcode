@@ -3,7 +3,7 @@
   "name": "道路位置",
   "nameEn": "Road Position",
   "icon": "lane",
-  "color": "#059669",
+  "color": "#a9b189",
   "summary": "如何在道路上保持正确的行车路线，道路上的标线和标识都是什么意思。",
   "questions": [
     {

@@ -216,7 +216,7 @@ async function waitStyled(b) {
       mounted: !!document.getElementById('rc-app') && document.getElementById('rc-app').children.length > 0,
       count: (document.querySelector('.quiz-count') || {}).textContent || '',
       timer: (document.querySelector('.quiz-timer') || {}).textContent || '',
-      nav: document.querySelectorAll('.quiz-bar .opt-key').length,
+      nav: document.querySelectorAll('.quiz-nav button').length,
       opts: document.querySelectorAll('.opt').length,
       feedback: document.querySelectorAll('.feedback').length
     }))()`);
@@ -232,7 +232,7 @@ async function waitStyled(b) {
       return true;
     })()`);
     const e1 = await b.eval(`(() => {
-      const navBtns = document.querySelectorAll('.quiz-bar .opt-key');
+      const navBtns = document.querySelectorAll('.quiz-nav button');
       // 依次点题号 2..10 并各选一项
       for (let i = 1; i < navBtns.length; i++) {
         navBtns[i].click();
@@ -309,44 +309,265 @@ async function waitStyled(b) {
     check('前端题库共 216 题', bank.total === 216, 'got ' + bank.total);
     check('图示库含 34 个图形', bank.imgs === 34, 'got ' + bank.imgs);
 
-    /* ---------------- 9. 移动端 ---------------- */
-    console.log('\n[9] 移动端 390×844');
+    /* ---------------- 9. 移动端 H5（390×844） ---------------- */
+    console.log('\n[9] 移动端 H5 首页 / 底部标签栏');
     await b.setMobile(390, 844);
     await b.goto(BASE + '/');
     check('样式表已生效', await waitStyled(b));
-    const mob = await b.eval(`(() => {
+
+    const m0 = await b.eval(`(() => {
       const de = document.documentElement;
-      const bar = document.querySelector('.site-header .wrap');
+      const tb = document.querySelector('.tabbar');
+      const cs = tb ? getComputedStyle(tb) : null;
+      const links = tb ? Array.from(tb.querySelectorAll('a')) : [];
+      const rects = links.map(a => a.getBoundingClientRect());
+      const tbRect = tb ? tb.getBoundingClientRect() : null;
+      const small = [];
+      const sel = '.tabbar a, .btn, .brand, .cat-card';
+      document.querySelectorAll(sel).forEach(el => {
+        const r = el.getBoundingClientRect(), c = getComputedStyle(el);
+        if (c.display === 'none' || r.height === 0) return;
+        if (r.height < 43.5) small.push(el.className + ' h=' + Math.round(r.height));
+      });
       return {
         overflow: de.scrollWidth - de.clientWidth,
-        barOverflow: bar ? bar.scrollWidth - bar.clientWidth : -1,
-        navVisible: getComputedStyle(document.querySelector('.site-nav')).display !== 'none',
+        barOverflow: (() => { const w = document.querySelector('.site-header .wrap'); return w ? w.scrollWidth - w.clientWidth : -1; })(),
+        hasTabbar: !!tb,
+        tabbarAria: tb ? tb.getAttribute('aria-label') : '',
+        tabbarPosition: cs ? cs.position : '',
+        tabbarDisplay: cs ? cs.display : '',
+        tabbarCols: cs ? cs.gridTemplateColumns.split(' ').length : 0,
+        tabbarTop: tbRect ? Math.round(tbRect.top) : -1,
+        tabbarH: tbRect ? Math.round(tbRect.height) : -1,
+        viewportH: window.innerHeight,
+        bodyPadBottom: parseFloat(getComputedStyle(document.body).paddingBottom) || 0,
+        linkCount: links.length,
+        labels: links.map(a => a.textContent.trim()),
+        minLinkH: rects.length ? Math.round(Math.min.apply(null, rects.map(r => r.height))) : 0,
+        current: tb ? Array.from(tb.querySelectorAll('a[aria-current="page"]')).map(a => a.textContent.trim()) : [],
+        smallTargets: small,
+        navDisplay: getComputedStyle(document.querySelector('.site-nav')).display,
         cards: document.querySelectorAll('.cat-card').length
       };
     })()`);
-    check('页面无横向溢出', mob.overflow <= 1, 'overflow=' + mob.overflow);
-    check('顶栏无横向溢出', mob.barOverflow <= 1, 'barOverflow=' + mob.barOverflow);
-    check('移动端导航仍可见', mob.navVisible);
-    check('移动端分类卡片完整', mob.cards === 8, 'got ' + mob.cards);
+
+    check('页面无横向溢出', m0.overflow <= 1, 'overflow=' + m0.overflow);
+    check('顶栏无横向溢出', m0.barOverflow <= 1, 'barOverflow=' + m0.barOverflow);
+    check('移动端有底部标签栏', m0.hasTabbar);
+    check('标签栏有 aria-label', m0.tabbarAria === '底部导航', m0.tabbarAria);
+    check('标签栏固定在视口底部', m0.tabbarPosition === 'fixed', m0.tabbarPosition);
+    check('标签栏贴住视口下沿', Math.abs(m0.tabbarTop + m0.tabbarH - m0.viewportH) <= 1,
+      'top=' + m0.tabbarTop + ' h=' + m0.tabbarH + ' vh=' + m0.viewportH);
+    check('标签栏 3 等分', m0.tabbarCols === 3, 'got ' + m0.tabbarCols);
+    check('标签栏 3 个入口', m0.linkCount === 3, 'got ' + m0.linkCount);
+    check('标签栏文案正确', m0.labels.join('/') === '首页/理论学习/模拟考试', m0.labels.join('/'));
+    check('首页高亮唯一', m0.current.length === 1 && m0.current[0] === '首页', JSON.stringify(m0.current));
+    check('标签栏触摸目标 ≥44px', m0.minLinkH >= 44, 'minH=' + m0.minLinkH);
+    check('body 为标签栏留出底部空间', m0.bodyPadBottom >= m0.tabbarH - 1,
+      'pad=' + m0.bodyPadBottom + ' barH=' + m0.tabbarH);
+    check('移动端主控件触摸目标 ≥44px', m0.smallTargets.length === 0, JSON.stringify(m0.smallTargets.slice(0, 5)));
+    check('移动端顶栏导航让位给标签栏', m0.navDisplay === 'none', m0.navDisplay);
+    check('移动端分类卡片完整', m0.cards === 8, 'got ' + m0.cards);
     await b.shot('tests/shots/07-mobile.png');
 
-    // 移动端考试页
-    await b.goto(BASE + '/exam/35/');
+    // 点底部标签栏真的能跳转，并且高亮跟着走
+    const mNav = await b.eval(`(() => {
+      const a = Array.from(document.querySelectorAll('.tabbar a')).find(x => x.textContent.includes('理论学习'));
+      a.click();
+      return true;
+    })()`);
+    check('点击标签栏可跳转', mNav === true);
+    await sleep(600);
+    const mNav2 = await b.eval(`(() => ({
+      url: location.pathname,
+      current: Array.from(document.querySelectorAll('.tabbar a[aria-current="page"]')).map(a => a.textContent.trim()),
+      backDisplay: (() => { const bl = document.querySelector('.back-link'); return bl ? getComputedStyle(bl).display : 'none'; })(),
+      backHref: (() => { const bl = document.querySelector('.back-link'); return bl ? bl.getAttribute('href') : ''; })(),
+      small: (() => {
+        const out = [];
+        document.querySelectorAll('.tabbar a, .btn, .q-list a').forEach(el => {
+          const r = el.getBoundingClientRect(), c = getComputedStyle(el);
+          if (c.display === 'none' || r.height === 0) return;
+          if (r.height < 43.5) out.push(el.className + ' h=' + Math.round(r.height));
+        });
+        return out;
+      })()
+    }))()`);
+    check('跳转到理论学习页', mNav2.url.indexOf('/study/') === 0, mNav2.url);
+    check('高亮切到理论学习', mNav2.current.length === 1 && mNav2.current[0] === '理论学习', JSON.stringify(mNav2.current));
+    // ⚠️ 不能断言 display === 'inline-flex'：.back-link 在 .site-header .wrap（flex 容器）
+    // 里，CSS 会把 inline-flex blockify 成 flex，getComputedStyle 返回的就是 'flex'。
+    check('移动端显示返回入口', mNav2.backDisplay !== 'none', mNav2.backDisplay);
+    check('返回链接指向首页', mNav2.backHref === '../', mNav2.backHref);
+    check('学习页触摸目标 ≥44px', mNav2.small.length === 0, JSON.stringify(mNav2.small.slice(0, 5)));
+
+    /* ---------------- 10. 移动端答题：专注模式 ---------------- */
+    console.log('\n[10] 移动端答题专注模式');
+    await b.goto(BASE + '/study/core/practice/');
     await waitStyled(b);
-    const mobExam = await b.eval(`(() => {
-      const de = document.documentElement;
+    const mq = await b.eval(`(() => {
+      const de = document.documentElement, body = document.body;
+      const tb = document.querySelector('.tabbar');
+      const hdr = document.querySelector('.site-header');
+      const qa = document.querySelector('.quiz-shell .quiz-actions');
+      const qb = document.querySelector('.quiz-back');
+      const qaRect = qa ? qa.getBoundingClientRect() : null;
+      const qbRect = qb ? qb.getBoundingClientRect() : null;
+      const small = [];
+      document.querySelectorAll('.quiz-shell .quiz-actions .btn, .opt, .quiz-back').forEach(el => {
+        const r = el.getBoundingClientRect(), c = getComputedStyle(el);
+        if (c.display === 'none' || r.height === 0) return;
+        if (r.height < 43.5) small.push(el.className + ' h=' + Math.round(r.height));
+      });
       return {
+        isFocus: body.classList.contains('is-focus'),
+        tabbarDisplay: tb ? getComputedStyle(tb).display : 'missing',
+        headerDisplay: hdr ? getComputedStyle(hdr).display : 'missing',
+        bodyPadBottom: parseFloat(getComputedStyle(body).paddingBottom) || 0,
+        hasBack: !!qb,
+        backSize: qbRect ? [Math.round(qbRect.width), Math.round(qbRect.height)] : null,
+        backLabel: qb ? qb.getAttribute('aria-label') : '',
+        actionsPosition: qa ? getComputedStyle(qa).position : 'missing',
+        actionsTop: qaRect ? Math.round(qaRect.top) : -1,
+        actionsBottom: qaRect ? Math.round(qaRect.bottom) : -1,
+        viewportH: window.innerHeight,
         overflow: de.scrollWidth - de.clientWidth,
-        nav: document.querySelectorAll('.quiz-bar .opt-key').length
+        smallTargets: small,
+        opts: document.querySelectorAll('.opt').length
       };
     })()`);
-    check('移动端考试页无横向溢出', mobExam.overflow <= 1, 'overflow=' + mobExam.overflow);
-    check('移动端 35 题导航完整', mobExam.nav === 35, 'got ' + mobExam.nav);
-    await b.shot('tests/shots/08-mobile-exam.png');
-    await b.clearMobile();
 
-    /* ---------------- 10. console 错误 ---------------- */
-    console.log('\n[10] 控制台错误');
+    check('练习页进入专注模式', mq.isFocus);
+    check('专注模式隐藏底部标签栏', mq.tabbarDisplay === 'none', mq.tabbarDisplay);
+    check('专注模式隐藏站点顶栏', mq.headerDisplay === 'none', mq.headerDisplay);
+    check('专注模式不留标签栏空位', mq.bodyPadBottom === 0, 'pad=' + mq.bodyPadBottom);
+    check('答题页有返回按钮', mq.hasBack);
+    check('返回按钮触摸目标 ≥44px', mq.backSize && mq.backSize[0] >= 44 && mq.backSize[1] >= 44, JSON.stringify(mq.backSize));
+    check('返回按钮有可读标签', /^返回/.test(mq.backLabel || ''), mq.backLabel);
+    check('主操作栏固定在视口内', mq.actionsPosition === 'fixed' &&
+      mq.actionsTop >= 0 && mq.actionsBottom <= mq.viewportH + 1,
+      'pos=' + mq.actionsPosition + ' top=' + mq.actionsTop + ' bottom=' + mq.actionsBottom + ' vh=' + mq.viewportH);
+    check('答题页无横向溢出', mq.overflow <= 1, 'overflow=' + mq.overflow);
+    check('答题页触摸目标 ≥44px', mq.smallTargets.length === 0, JSON.stringify(mq.smallTargets.slice(0, 5)));
+    check('练习页有 4 个选项', mq.opts === 4, 'got ' + mq.opts);
+    await b.shot('tests/shots/08-mobile-practice.png');
+
+    /* ---------------- 11. 移动端考试题号导航 ---------------- */
+    console.log('\n[11] 移动端考试题号导航');
+    await b.goto(BASE + '/exam/35/');
+    await waitStyled(b);
+    const mn = await b.eval(`(() => {
+      const de = document.documentElement;
+      const nav = document.querySelector('.quiz-nav');
+      const btns = nav ? Array.from(nav.querySelectorAll('button')) : [];
+      const rects = btns.map(x => x.getBoundingClientRect());
+      const cur = nav ? nav.querySelector('button.is-current') : null;
+      return {
+        hasNav: !!nav,
+        count: btns.length,
+        minH: rects.length ? Math.round(Math.min.apply(null, rects.map(r => r.height))) : 0,
+        minW: rects.length ? Math.round(Math.min.apply(null, rects.map(r => r.width))) : 0,
+        current: cur ? cur.textContent.trim() : '',
+        currentCount: nav ? nav.querySelectorAll('.is-current').length : 0,
+        doneCount: nav ? nav.querySelectorAll('.is-done').length : 0,
+        scrollable: nav ? nav.scrollWidth > nav.clientWidth : false,
+        overflow: de.scrollWidth - de.clientWidth
+      };
+    })()`);
+    check('考试页有题号导航', mn.hasNav);
+    check('35 个题号', mn.count === 35, 'got ' + mn.count);
+    check('题号触摸目标 ≥44px', mn.minH >= 44 && mn.minW >= 44, 'h=' + mn.minH + ' w=' + mn.minW);
+    check('当前题高亮唯一', mn.currentCount === 1 && mn.current === '1', JSON.stringify(mn));
+    check('题号条可横向滚动', mn.scrollable);
+    check('考试页无横向溢出', mn.overflow <= 1, 'overflow=' + mn.overflow);
+
+    // 题号状态：当前题恒为 is-current，is-done 只给「已答过但已翻走」的题。
+    // 所以答完第 1 题后它仍是 is-current，要翻到第 2 题才会看到它变 is-done。
+    const mn2 = await b.eval(`(() => {
+      document.querySelectorAll('.opt')[0].click();
+      return {
+        done: document.querySelectorAll('.quiz-nav .is-done').length,
+        current: (document.querySelector('.quiz-nav .is-current') || {}).textContent || ''
+      };
+    })()`);
+    check('当前题只高亮、不标记已答', mn2.done === 0 && mn2.current.trim() === '1', JSON.stringify(mn2));
+
+    const mn3 = await b.eval(`(() => {
+      document.querySelectorAll('.quiz-nav button')[1].click();
+      return {
+        done: document.querySelectorAll('.quiz-nav .is-done').length,
+        doneText: (document.querySelector('.quiz-nav .is-done') || {}).textContent || '',
+        current: (document.querySelector('.quiz-nav .is-current') || {}).textContent || ''
+      };
+    })()`);
+    check('翻页后已答题号标记为已答', mn3.done === 1 && mn3.doneText.trim() === '1', JSON.stringify(mn3));
+    check('当前题号跟着切换', mn3.current.trim() === '2', mn3.current);
+    await b.shot('tests/shots/09-mobile-exam.png');
+
+    /* ---------------- 12. 设计令牌（莫兰迪色系） ---------------- */
+    console.log('\n[12] 设计令牌与配色');
+    await b.clearMobile();
+    await b.goto(BASE + '/study/');
+    await waitStyled(b);
+    const dz = await b.eval(`(() => {
+      const cs = getComputedStyle(document.documentElement);
+      const v = n => cs.getPropertyValue(n).trim();
+      const satOf = rgb => {
+        const arr = rgb.map(x => x / 255);
+        const mx = Math.max.apply(null, arr), mn = Math.min.apply(null, arr);
+        const l = (mx + mn) / 2;
+        if (mx === mn) return 0;
+        const d = mx - mn;
+        return d / (l > .5 ? (2 - mx - mn) : (mx + mn));
+      };
+      const chromaOf = rgb => (Math.max.apply(null, rgb) - Math.min.apply(null, rgb)) / 255;
+      const hexSat = h => {
+        const m = /^#([0-9a-f]{6})$/i.exec(h.trim());
+        if (!m) return -1;
+        const n = parseInt(m[1], 16);
+        return satOf([n >> 16 & 255, n >> 8 & 255, n & 255]);
+      };
+      const hexChroma = h => {
+        const m = /^#([0-9a-f]{6})$/i.exec(h.trim());
+        if (!m) return -1;
+        const n = parseInt(m[1], 16);
+        return chromaOf([n >> 16 & 255, n >> 8 & 255, n & 255]);
+      };
+      const cats = Array.from(document.querySelectorAll('.cat-card .cat-icon')).map(el => {
+        const c = getComputedStyle(el).color;
+        const m = /rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)/.exec(c);
+        return { color: c, sat: m ? satOf([+m[1], +m[2], +m[3]]) : -1 };
+      });
+      const tb = document.querySelector('.tabbar');
+      const bl = document.querySelector('.back-link');
+      return {
+        brand: v('--brand'),
+        brandDeep: v('--brand-deep'),
+        bg: v('--bg'),
+        ink: v('--ink'),
+        brandSat: hexSat(v('--brand')),
+        // 近白色用 HSL 饱和度衡量会失真（#f5f2ef 明明几乎无色，算出来却有 23%），
+        // 所以中性度改用「通道极差」：完全中性 = 0，肉眼可辨的染色才 >0.05。
+        bgChroma: hexChroma(v('--bg')),
+        cats: cats,
+        maxCatSat: cats.length ? Math.max.apply(null, cats.map(c => c.sat)) : -1,
+        tabbarDisplay: tb ? getComputedStyle(tb).display : 'missing',
+        backLinkDisplay: bl ? getComputedStyle(bl).display : 'missing',
+        themeColor: (document.querySelector('meta[name="theme-color"]') || {}).content || ''
+      };
+    })()`);
+
+    check('品牌色是莫兰迪灰青', dz.brand === '#7c9c97', dz.brand);
+    check('品牌色饱和度 < 50%', dz.brandSat >= 0 && dz.brandSat < 0.5, String(dz.brandSat));
+    check('背景色是近乎中性的暖灰', dz.bgChroma >= 0 && dz.bgChroma < 0.05, dz.bg + ' chroma=' + dz.bgChroma);
+    check('8 个分类色全部低饱和（莫兰迪）', dz.cats.length === 8 && dz.maxCatSat < 0.5,
+      'n=' + dz.cats.length + ' maxSat=' + dz.maxCatSat.toFixed(3) + ' ' + JSON.stringify(dz.cats.map(c => c.color)));
+    check('桌面端隐藏底部标签栏', dz.tabbarDisplay === 'none', dz.tabbarDisplay);
+    check('桌面端隐藏返回按钮（改用面包屑）', dz.backLinkDisplay === 'none', dz.backLinkDisplay);
+    check('theme-color 与背景一致', dz.themeColor === dz.bg, dz.themeColor + ' vs ' + dz.bg);
+
+    /* ---------------- 13. console 错误 ---------------- */
+    console.log('\n[13] 控制台错误');
     const errs = b.consoleErrors().filter(e => !/favicon/i.test(e));
     check('没有 console 错误', errs.length === 0, JSON.stringify(errs.slice(0, 5)));
 

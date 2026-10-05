@@ -11,42 +11,93 @@ import {
   readFileSync, writeFileSync, mkdirSync, cpSync,
   existsSync, readdirSync, unlinkSync, rmdirSync
 } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { signs, diagrams, renderImage, captions } from './src/images.mjs';
 
 /**
- * 清空目录内容，但**保留目录本身**。
+ * ⚠️ 环境约束：**不要在这个脚本里批量删除文件**（也不要写回 "先清空 dist 再重建"）。
  *
- * ⚠️ 这里刻意避开两个写法：
+ * 宿主（WorkBuddy CLI 运行时）给 Node 挂了一层"安全删除"垫片，它对**每一次**
+ * unlink / rmdir 都会 `execFileSync` 拉起一个 node 子进程做守卫检查。由此：
  *
- * 1. `fs.rmSync(dir, { recursive: true })` —— 某些宿主环境（含 WorkBuddy 的
- *    CLI 运行时）会给 Node 挂一层"安全删除"垫片，把递归删除重定向到系统回收站。
- *    回收站操作一旦失败（实测报 "Some operations were aborted"），删除就抛错、
- *    构建直接中断，而堆栈指向 build.mjs，看起来像构建脚本自己写错了。
+ * 1. 慢 —— 实测每个文件约 0.37 秒，250 个产物文件光清空就要 1.5~3 分钟。
+ * 2. **会直接失败** —— 守卫按"会话请求（一轮对话）"累计删除数，阈值 50
+ *    （CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD）。累计到 50 之后，本轮每一次
+ *    删除都抛 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 并中断。本站有 250 个
+ *    产物文件，所以"先清空再重建"这条路**根本走不通** —— 而且报错堆栈指向
+ *    本文件，看起来像构建脚本自己写错了。
  *
- * 2. `fs.rmdirSync('dist')` —— 这层垫片**专门保护名为 dist 的顶层目录**
- *    （实测 build / out / public / .git 都能删，只有 dist 会被拦下）。
- *    所以收尾时不能把 dist 自己删掉，只能把里面的东西清空。
+ * 另外这层垫片还**专门保护名为 dist 的顶层目录**：`rmdirSync('dist')` 与
+ * `rm -rf dist` 都会被拦下（实测 build / out / public / .git 都能删，只有
+ * dist 不行），所以连"整个删掉重建"这个退路也没有。
  *
- * 逐文件 unlink + 自底向上 rmdir 子目录不受影响，效果与 rm -rf dist/* 等价。
+ * 结论：产物目录只做**原地覆盖**，收尾只清理遗留文件。见下面的 pruneStale()。
  */
-function emptyDir(dir) {
-  if (!existsSync(dir)) return;
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      emptyDir(p);
-      rmdirSync(p);
-    } else {
-      unlinkSync(p);
+
+/**
+ * 本次构建写出的全部产物（绝对路径）。用途见 pruneStale()。
+ */
+const WRITTEN = new Set();
+
+/**
+ * 写一个产物文件，并登记到 WRITTEN。
+ * 所有构建期写文件都必须走这里，否则收尾会被当成遗留文件删掉。
+ */
+function writeOut(absPath, content) {
+  mkdirSync(dirname(absPath), { recursive: true });
+  writeFileSync(absPath, content);
+  WRITTEN.add(resolve(absPath));
+}
+
+/** 复制一个产物文件，并登记到 WRITTEN。 */
+function copyOut(absPath, srcPath) {
+  mkdirSync(dirname(absPath), { recursive: true });
+  cpSync(srcPath, absPath);
+  WRITTEN.add(resolve(absPath));
+}
+
+/**
+ * 收尾：只删掉「上一次构建有、这一次没写」的遗留文件。
+ *
+ * 这是本站唯一可行的构建收尾方式（原因见 emptyDir 的注释）：
+ * 正常重建时页面集合不变，**一个文件都不用删**，构建从 5 分 20 秒降到 2 秒；
+ * 只有真的删了页面或改了题目 id 时，才付出那几个文件的删除代价。
+ *
+ * 产物集合由「本次实际写出的文件」定义，所以即使上一次构建是中途崩掉的
+ * 半成品，这里也能把残缺的旧文件清干净，结果与全量重建一致。
+ *
+ * 删除失败（例如本轮删除配额已被别的操作用光）时**不抛错**：站点内容本身
+ * 已经是对的，只是多留了几个文件，没必要让整个构建失败。改为收集起来告警。
+ */
+function pruneStale() {
+  const failed = [];
+  let removed = 0;
+
+  const walk = dir => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(p);
+        // 必须**先递归删完子文件再 rmdir**，否则目录还非空、rmdirSync 抛 ENOTEMPTY。
+        // 子目录里若有删不掉的文件，这里同样会抛，保留目录即可。
+        try { rmdirSync(p); } catch { /* 目录非空或删不掉，保留 */ }
+      } else if (!WRITTEN.has(resolve(p))) {
+        try { unlinkSync(p); removed++; } catch { failed.push(p); }
+      }
     }
-  }
+  };
+  walk(DIST);
+  return { removed, failed };
 }
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const DIST = join(ROOT, 'dist');
-const SITE_URL = (process.env.SITE_URL || 'https://nz-roadcode.workers.dev').replace(/\/$/, '');
+// 站点对外地址，写进 canonical / sitemap / og:url。
+// ⚠️ 必须和真实部署地址一致 —— 写成别的域名等于让搜索引擎去收录一个不存在的
+// 主机名。改域名时改这里，或用 SITE_URL 环境变量覆盖。
+const SITE_URL = (process.env.SITE_URL || 'https://nz-roadcode.2412.workers.dev').replace(/\/$/, '');
 const SITE_NAME = 'NZ Road Code 中文版';
 const SITE_TAGLINE = '新西兰交规理论学习和模拟考试';
 
@@ -92,7 +143,10 @@ const ICONS = {
   lane: '<path d="M6 21V5.5M18 21V5.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M12 20V4m0 0-3 3.4M12 4l3 3.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2.6 2.4"/>',
   junction: '<path d="M12 21V11m0 0 7-6M12 11 5 5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="21" r="1.4" fill="currentColor"/><circle cx="5" cy="5" r="1.4" fill="currentColor"/><circle cx="19" cy="5" r="1.4" fill="currentColor"/>',
   book: '<path d="M4.5 4.6h5.2c1.3 0 2.3 1 2.3 2.3v12.5c0-1.3-1-2.3-2.3-2.3H4.5V4.6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M19.5 4.6h-5.2c-1.3 0-2.3 1-2.3 2.3v12.5c0-1.3 1-2.3 2.3-2.3h5.2V4.6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>',
-  sign: '<rect x="4.6" y="4.6" width="14.8" height="14.8" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 8.4v7.2M8.4 12h7.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>'
+  sign: '<rect x="4.6" y="4.6" width="14.8" height="14.8" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 8.4v7.2M8.4 12h7.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
+  home: '<path d="M4 10.6 12 4l8 6.6V19a1.6 1.6 0 0 1-1.6 1.6h-3.2v-5.4H8.8v5.4H5.6A1.6 1.6 0 0 1 4 19v-8.4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+  clipboard: '<rect x="5.4" y="4.8" width="13.2" height="15.6" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.2 4.8V3.6A1.4 1.4 0 0 1 10.6 2.2h2.8a1.4 1.4 0 0 1 1.4 1.4v1.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m9.6 12.6 1.8 1.8 3.2-3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+  back: '<path d="M15 5.6 8.6 12 15 18.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
 };
 
 const icon = (key, size = 20) =>
@@ -105,20 +159,34 @@ const esc = s => String(s).replace(/[&<>"']/g, c =>
 
 const rel = depth => '../'.repeat(depth);
 
-function layout({ title, description, path, depth, body, head = '', bodyClass = '' }) {
+/**
+ * 页面骨架。
+ *
+ * nav     —— 当前激活的顶级导航（'study' | 'exam'），用于给顶栏和底部标签栏加 aria-current
+ * back    —— { href, label } 子页返回目标；移动端会在顶栏左侧出现返回按钮
+ * focus   —— 答题模式：移动端隐藏站点框架（顶栏/页脚/标签栏），把屏幕让给题目
+ */
+function layout({ title, description, path, depth, body, head = '', nav = '', back = null, focus = false }) {
   const r = rel(depth);
   const canonical = SITE_URL + path;
   const fullTitle = title === SITE_NAME ? title : `${title} | ${SITE_NAME}`;
+  const cur = k => (nav === k ? ' aria-current="page"' : '');
+
+  const backLink = back
+    ? `<a class="back-link" href="${r}${back.href}" aria-label="返回${esc(back.label)}">${icon('back', 17)}</a>`
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${esc(fullTitle)}</title>
 <meta name="description" content="${esc(description)}">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="${esc(canonical)}">
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#f5f2ef">
+<meta name="format-detection" content="telephone=no">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${esc(SITE_NAME)}">
 <meta property="og:title" content="${esc(fullTitle)}">
@@ -129,16 +197,17 @@ function layout({ title, description, path, depth, body, head = '', bodyClass = 
 <link rel="stylesheet" href="${r}assets/styles.css">
 ${head}
 </head>
-<body${bodyClass ? ` class="${bodyClass}"` : ''}>
+<body${focus ? ' class="is-focus"' : ''}>
 <header class="site-header">
   <div class="wrap">
+    ${backLink}
     <a class="brand" href="${r}">
       <span class="brand-mark">RC</span>
-      <span>${esc(SITE_NAME)}<span class="brand-sub">NEW ZEALAND ROAD CODE</span></span>
+      <span class="brand-text">${esc(SITE_NAME)}<span class="brand-sub">NEW ZEALAND ROAD CODE</span></span>
     </a>
     <nav class="site-nav" aria-label="主导航">
-      <a href="${r}study/">理论学习</a>
-      <a href="${r}exam/">模拟考试</a>
+      <a href="${r}study/"${cur('study')}>理论学习</a>
+      <a href="${r}exam/"${cur('exam')}>模拟考试</a>
       <a class="cta" href="${r}exam/35/">开始模拟考</a>
     </nav>
   </div>
@@ -154,6 +223,11 @@ ${body}
     </nav>
   </div>
 </footer>
+<nav class="tabbar" aria-label="底部导航">
+  <a href="${r}"${cur('home')}>${icon('home', 21)}<span>首页</span></a>
+  <a href="${r}study/"${cur('study')}>${icon('book', 21)}<span>理论学习</span></a>
+  <a href="${r}exam/"${cur('exam')}>${icon('clipboard', 21)}<span>模拟考试</span></a>
+</nav>
 <script src="${r}assets/images.js"></script>
 <script src="${r}assets/questions.js"></script>
 <script src="${r}assets/app.js"></script>
@@ -191,9 +265,7 @@ function breadcrumbs(items, depth) {
 }
 
 function page(relPath, html) {
-  const out = join(DIST, relPath);
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, html);
+  writeOut(join(DIST, relPath), html);
 }
 
 /* ---------- 首页 ---------- */
@@ -234,7 +306,7 @@ function buildHome() {
   </div>
 </section>
 
-<section class="section" style="background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+<section class="section section-tint">
   <div class="wrap">
     <div class="section-head">
       <h2>模拟考试</h2>
@@ -245,6 +317,7 @@ function buildHome() {
         <span class="exam-num">${e.count}</span>
         <h3>${esc(e.label)}</h3>
         <p>${esc(e.desc)}</p>
+        <span class="exam-meta">限时 ${Math.round(Math.max(300, e.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(e.count * 0.9)} 题</span>
         <a class="btn ${e.count === 35 ? 'btn-primary' : 'btn-ghost'}" href="exam/${e.count}/">开始考试</a>
       </div>`).join('\n      ')}
     </div>
@@ -283,6 +356,7 @@ function buildHome() {
     description: `新西兰交规中文理论学习和模拟考试。${TOTAL_QUESTIONS} 道原创中文试题，覆盖核心规则、交通路口、道路标识等 8 个分类，逐题解析，含 10/20/35/50 题模拟考试，无广告。`,
     path: '/',
     depth,
+    nav: 'home',
     body,
     head: `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
   }));
@@ -322,6 +396,8 @@ function buildStudyIndex() {
     description: `新西兰交规理论学习，${TOTAL_QUESTIONS} 道中文试题按核心规则、驾驶行为、停车标识、紧急事故、道路位置、交通路口、理论知识、道路标识 8 个分类整理，逐题配有解析。`,
     path: '/study/',
     depth,
+    nav: 'study',
+    back: { href: '', label: '首页' },
     body
   }));
 }
@@ -360,6 +436,8 @@ function buildCategoryPage(cat) {
     description: `新西兰交规「${cat.name}」（${cat.nameEn}）共 ${cat.questions.length} 道中文试题，逐题配有答案与解析。${cat.summary}`,
     path: `/study/${cat.id}/`,
     depth,
+    nav: 'study',
+    back: { href: 'study/', label: '理论学习' },
     body
   }));
 }
@@ -383,6 +461,9 @@ function buildPracticePage(cat) {
     description: `新西兰交规「${cat.name}」逐题学习，${cat.questions.length} 道题即时判分并给出中文解析。`,
     path: `/study/${cat.id}/practice/`,
     depth,
+    nav: 'study',
+    back: { href: `study/${cat.id}/`, label: cat.name },
+    focus: true,
     body
   }));
 }
@@ -449,6 +530,8 @@ function buildQuestionPage(q, cat) {
     description: `${q.q} — ${cat.name}第 ${idx + 1} 题，正确答案与中文解析。`,
     path: `/study/question/${q.id}/`,
     depth,
+    nav: 'study',
+    back: { href: `study/${cat.id}/`, label: cat.name },
     body,
     head: `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`
   }));
@@ -483,6 +566,8 @@ function buildExamIndex() {
     description: `新西兰驾照理论考试模拟，提供 10、20、35、50 题四种题量的随机抽题测试，含计时与交卷后逐题解析回顾。`,
     path: '/exam/',
     depth,
+    nav: 'exam',
+    back: { href: '', label: '首页' },
     body
   }));
 }
@@ -504,6 +589,9 @@ function buildExamPage(exam) {
     description: `${exam.label}：从新西兰交规题库随机抽取 ${exam.count} 道题，限时作答，交卷后给出成绩与逐题解析。`,
     path: `/exam/${exam.count}/`,
     depth,
+    nav: 'exam',
+    back: { href: 'exam/', label: '模拟考试' },
+    focus: true,
     body
   }));
 }
@@ -541,6 +629,7 @@ function buildAbout() {
     description: `关于${SITE_NAME}：内容来源、无广告声明、新西兰驾照理论考试的备考建议。`,
     path: '/about/',
     depth,
+    back: { href: '', label: '首页' },
     body
   }));
 }
@@ -548,28 +637,28 @@ function buildAbout() {
 /* ---------- 静态资源 ---------- */
 
 function buildAssets() {
-  cpSync(join(ROOT, 'src', 'styles.css'), join(DIST, 'assets', 'styles.css'));
-  cpSync(join(ROOT, 'src', 'app.js'), join(DIST, 'assets', 'app.js'));
+  copyOut(join(DIST, 'assets', 'styles.css'), join(ROOT, 'src', 'styles.css'));
+  copyOut(join(DIST, 'assets', 'app.js'), join(ROOT, 'src', 'app.js'));
 
   // 图示库：key -> SVG 字符串
   const imgMap = {};
   Object.keys(signs).forEach(k => { imgMap[k] = signs[k](); });
   Object.keys(diagrams).forEach(k => { imgMap[k] = diagrams[k](); });
-  writeFileSync(join(DIST, 'assets', 'images.js'),
+  writeOut(join(DIST, 'assets', 'images.js'),
     '/* 自绘 SVG 图示库（构建产物，请勿手改） */\n'
     + 'window.RC_IMAGES = ' + JSON.stringify(imgMap) + ';\n'
     + 'window.RC_CAPTIONS = ' + JSON.stringify(captions) + ';\n');
 
   // 题库：给前端交互使用
-  writeFileSync(join(DIST, 'assets', 'questions.js'),
+  writeOut(join(DIST, 'assets', 'questions.js'),
     '/* 题库数据（构建产物，请勿手改） */\nwindow.RC_BANK = ' + JSON.stringify({ categories }) + ';\n');
 
   // favicon
   const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0f766e"/>
+  <rect width="64" height="64" rx="14" fill="#7c9c97"/>
   <text x="32" y="34" font-family="Arial,Helvetica,sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">RC</text>
 </svg>`;
-  writeFileSync(join(DIST, 'assets', 'favicon.svg'), favicon);
+  writeOut(join(DIST, 'assets', 'favicon.svg'), favicon);
 }
 
 /* ---------- 404 / robots / sitemap / headers ---------- */
@@ -594,9 +683,9 @@ function buildMeta() {
     depth,
     body
   }).replace('<meta name="robots" content="index, follow">', '<meta name="robots" content="noindex,follow">');
-  writeFileSync(join(DIST, '404.html'), html404);
+  writeOut(join(DIST, '404.html'), html404);
 
-  writeFileSync(join(DIST, 'robots.txt'),
+  writeOut(join(DIST, 'robots.txt'),
     `User-agent: *\nAllow: /\nDisallow: /404.html\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 
   // sitemap
@@ -612,12 +701,12 @@ function buildMeta() {
   });
   EXAMS.forEach(e => urls.push({ loc: `/exam/${e.count}/`, pri: '0.7', freq: 'monthly' }));
 
-  writeFileSync(join(DIST, 'sitemap.xml'),
+  writeOut(join(DIST, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     urls.map(u => `  <url><loc>${SITE_URL}${u.loc}</loc><changefreq>${u.freq}</changefreq><priority>${u.pri}</priority></url>`).join('\n') +
     `\n</urlset>\n`);
 
-  writeFileSync(join(DIST, '_headers'),
+  writeOut(join(DIST, '_headers'),
     `/*
   X-Content-Type-Options: nosniff
   X-Frame-Options: SAMEORIGIN
@@ -634,7 +723,7 @@ function buildMeta() {
 
   // 静态资源目录就是 dist/，里面只有站点文件；这个文件是防御性的，
   // 万一以后有人把构建脚本或仓库文件混进来，也不会被上传。
-  writeFileSync(join(DIST, '.assetsignore'),
+  writeOut(join(DIST, '.assetsignore'),
     `.git/
 .gitignore
 .gitattributes
@@ -653,7 +742,9 @@ build.mjs
 /* ---------- 主流程 ---------- */
 
 function main() {
-  emptyDir(DIST);
+  const t0 = Date.now();
+
+  // 不清空 dist：同名文件原地覆盖，收尾只删遗留文件。原因见 emptyDir / pruneStale。
   mkdirSync(join(DIST, 'assets'), { recursive: true });
 
   buildAssets();
@@ -669,11 +760,19 @@ function main() {
   buildAbout();
   buildMeta();
 
+  const pruned = pruneStale();
+
   const files = ALL_QUESTIONS.length;
-  console.log(`✓ 构建完成`);
+  console.log(`✓ 构建完成（${((Date.now() - t0) / 1000).toFixed(2)}s）`);
   console.log(`  分类：${categories.length} 个`);
   console.log(`  试题：${TOTAL_QUESTIONS} 道（生成 ${files} 个单题页）`);
   console.log(`  模拟考试：${EXAMS.map(e => e.count).join(' / ')} 题`);
+  console.log(`  写入：${WRITTEN.size} 个文件；清理遗留：${pruned.removed} 个`);
+  if (pruned.failed.length) {
+    console.warn(`  ⚠ 有 ${pruned.failed.length} 个遗留文件删不掉（多为宿主的批量删除配额用尽），` +
+      `站点内容不受影响，但这些文件会被一并部署：`);
+    pruned.failed.slice(0, 10).forEach(p => console.warn(`    - ${p}`));
+  }
   console.log(`  SITE_URL：${SITE_URL}`);
   console.log(`  输出目录：${DIST}`);
 }

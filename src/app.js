@@ -58,6 +58,25 @@
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
 
+  /** 从当前路径推出到站点根的相对前缀：/study/core/practice/ -> ../../../ */
+  function rootPrefix() {
+    var p = location.pathname;
+    var segs = p.split('/').filter(Boolean);
+    var levels = /\/$/.test(p) ? segs.length : Math.max(segs.length - 1, 0);
+    return '../'.repeat(Math.max(levels, 1));
+  }
+
+  /** 答题界面左上角的返回按钮（专注模式下站点顶栏被隐藏，需要自带返回入口） */
+  function backBtn(href, label) {
+    var a = el('a', 'quiz-back');
+    a.href = href;
+    a.setAttribute('aria-label', '返回' + label);
+    a.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">'
+      + '<path d="M15 5.6 8.6 12 15 18.4" fill="none" stroke="currentColor" stroke-width="2" '
+      + 'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return a;
+  }
+
   function figure(q, wide) {
     if (!q.image || !IMAGES[q.image]) return null;
     var box = el('div', 'q-figure' + (wide ? ' wide' : ''));
@@ -94,9 +113,9 @@
       /* 进度条 */
       var bar = el('div', 'quiz-bar');
       var row1 = el('div', 'quiz-bar-row');
+      row1.appendChild(backBtn(rootPrefix() + 'study/' + cat.id + '/', cat.name));
       row1.appendChild(el('span', 'quiz-count', '第 ' + (i + 1) + ' 题 / 共 ' + list.length + ' 题'));
-      var right = el('span', 'quiz-timer', cat.name);
-      row1.appendChild(right);
+      row1.appendChild(el('span', 'quiz-timer', cat.name));
       bar.appendChild(row1);
       var row2 = el('div', 'quiz-bar-row');
       var prog = el('div', 'progress');
@@ -167,7 +186,7 @@
       actions.appendChild(prev);
 
       if (!answered) {
-        var skip = el('button', 'btn btn-quiet', '不会，看答案');
+        var skip = el('button', 'btn btn-quiet', '看答案');
         skip.type = 'button';
         skip.addEventListener('click', function () {
           picked[i] = -1; revealed[i] = true; render();
@@ -336,12 +355,11 @@
 
       var bar = el('div', 'quiz-bar');
       var row1 = el('div', 'quiz-bar-row');
+      row1.appendChild(backBtn(rootPrefix() + 'exam/', '模拟考试'));
       row1.appendChild(el('span', 'quiz-count', '第 ' + (i + 1) + ' 题 / 共 ' + list.length + ' 题'));
       var answeredN = answers.filter(function (a) { return a !== null; }).length;
-      var status = el('span', 'pill', '已答 ' + answeredN + ' 题');
-      row1.appendChild(status);
-      var tm = el('span', 'quiz-timer', '剩余 ' + fmtTime(Math.max(0, left)));
-      row1.appendChild(tm);
+      row1.appendChild(el('span', 'pill', '已答 ' + answeredN + ' 题'));
+      row1.appendChild(el('span', 'quiz-timer', '剩余 ' + fmtTime(Math.max(0, left))));
       bar.appendChild(row1);
 
       var row2 = el('div', 'quiz-bar-row');
@@ -352,23 +370,24 @@
       row2.appendChild(prog);
       bar.appendChild(row2);
 
-      // 题号导航
-      var nav = el('div', 'quiz-bar-row');
-      nav.style.gap = '6px';
+      /* 题号导航：移动端横向滚动，当前题自动滚到可视区中间 */
+      var nav = el('div', 'quiz-nav');
+      nav.setAttribute('aria-label', '题号导航');
       list.forEach(function (_, idx) {
-        var b = el('button', 'opt-key', String(idx + 1));
+        var cls = idx === i ? 'is-current' : (answers[idx] !== null ? 'is-done' : '');
+        var b = el('button', cls, String(idx + 1));
         b.type = 'button';
-        b.style.cursor = 'pointer';
-        b.style.width = '26px';
-        b.style.height = '26px';
-        b.style.fontSize = '.74rem';
-        if (idx === i) { b.style.background = 'var(--brand)'; b.style.color = '#fff'; b.style.borderColor = 'var(--brand)'; }
-        else if (answers[idx] !== null) { b.style.background = 'var(--brand-soft)'; b.style.borderColor = 'var(--brand)'; }
+        b.setAttribute('aria-label', '第 ' + (idx + 1) + ' 题');
         b.addEventListener('click', function () { i = idx; render(); });
         nav.appendChild(b);
       });
       bar.appendChild(nav);
       shell.appendChild(bar);
+
+      requestAnimationFrame(function () {
+        var cur = nav.querySelector('.is-current');
+        if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'center' });
+      });
 
       var card = el('div', 'card q-card');
       var head = el('div', 'q-head');
@@ -386,7 +405,6 @@
         var li = el('li');
         var btn = el('button', 'opt' + (answers[i] === idx ? ' is-selected' : ''));
         btn.type = 'button';
-        if (answers[i] === idx) { btn.style.borderColor = 'var(--brand)'; btn.style.background = '#f0fdfa'; }
         btn.appendChild(el('span', 'opt-key', LETTERS[idx]));
         btn.appendChild(el('span', 'opt-body', text));
         btn.addEventListener('click', function () { answers[i] = idx; render(); });
