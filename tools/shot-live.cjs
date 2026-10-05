@@ -15,10 +15,15 @@
  * 截图落到 tests/shots/（已 gitignore）。
  */
 
+const path = require('path');
 const { launch } = require('../tests/cdp-client.cjs');
 
 const BASE = process.env.BASE || 'https://nz-roadcode.2412.workers.dev';
 const has = (f) => process.argv.includes(f);
+
+/** 对照页放在 tests/shots/（不落 dist/），用 file:// 打开 */
+const ROOT = path.join(__dirname, '..');
+const fileUrl = (rel) => 'file:///' + path.join(ROOT, rel).replace(/\\/g, '/');
 
 const MODE = has('--sheet') ? 'sheet'
   : has('--scenes') ? 'scenes'
@@ -42,9 +47,9 @@ const PAGES = {
     ['q-intersection-03', '/study/question/intersection-03/'],
     ['q-intersection-04', '/study/question/intersection-04/'],
   ],
-  sheet: [['markings-sheet', '/__sheet.html']],
-  scenes: [['scenes', '/__scenes.html']],
-  kannz: [['kannz-sheet', '/__kannz.html']],
+  sheet: [['markings-sheet', fileUrl('tests/shots/__sheet.html')]],
+  scenes: [['scenes', fileUrl('tests/shots/__scenes.html')]],
+  kannz: [['kannz-sheet', fileUrl('tests/shots/__kannz.html')]],
 }[MODE];
 
 /** 前三个模式是「对照页」，用大视口；其余按页面类型给默认值 */
@@ -67,7 +72,8 @@ const PREFIX = (MODE === 'sheet' || MODE === 'scenes' || MODE === 'kannz' || MOD
   const b = await launch(SIZE);
   try {
     for (const [name, p] of PAGES) {
-      await b.goto(BASE + p, 45000);
+      // 对照页给的是 file:// 绝对地址，其余是站点路径
+      await b.goto(/^[a-z]+:\/\//.test(p) ? p : BASE + p, 45000);
       await new Promise(r => setTimeout(r, 800));
       const file = `tests/shots/${PREFIX}${name}.png`;
       await b.shot(file);

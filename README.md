@@ -96,7 +96,8 @@ src/images.mjs     自绘 SVG 图示库：30 个标志 + 4 个路口场景 + 14 
 src/styles.css     样式表（手写，无框架；莫兰迪设计令牌 + H5 布局）
 src/app.js         前端交互：逐题学习 + 模拟考试
 tools/check-coverage.cjs  覆盖度体检（构建时自动跑，也可单独执行）
-tools/figure-sheet.mjs    生成图示对照页（场景图叠车道参考线 / 标线完整+加粗），人工核对质量
+tools/figure-sheet.mjs    生成图示对照页到 tests/shots/（场景图叠车道参考线 / 标线完整+加粗）
+                          ⚠️ 故意不写进 dist/ —— 对照页会内联参考站的图，见「开发期对照页」一节
 tools/shot-live.cjs       抓页面截图（--questions / --sheet / --scenes / --kannz）
 build.mjs          构建脚本：把题库渲染成静态站点到 dist/
 dist/              构建产物（= Cloudflare 静态资源目录，已 gitignore）
@@ -192,13 +193,39 @@ laneCar(pos, dir, band, fill, label)
 改完图示想一次性检查质量，跑：
 
 ```bash
-node tools/figure-sheet.mjs              # dist/__sheet.html：场景图（叠车道参考线）+ 标线完整/加粗 两版
-node tools/figure-sheet.mjs --scenes     # dist/__scenes.html：只放场景图，2 列大图
-BASE=http://127.0.0.1:8792 node tools/shot-live.cjs --scenes   # 截图到 tests/shots/scenes.png
+node tools/figure-sheet.mjs              # tests/shots/__sheet.html：场景图（叠车道参考线）+ 标线完整/加粗 两版
+node tools/figure-sheet.mjs --scenes     # tests/shots/__scenes.html：只放场景图，2 列大图
+node tools/shot-live.cjs --scenes        # 截图到 tests/shots/scenes.png（走 file://，不需要 dev server）
 ```
 
 单看一张图很难判断比例对不对（条纹粗细、间隔、线宽够不够看清），
 排成网格横向对比才看得出哪个画歪了。
+
+### ⚠️ 开发期对照页不许写进 `dist/`
+
+`figure-sheet.mjs` 和 `research/contact-sheet.cjs` 产出的对照页是开发期产物，
+**输出目录是 `tests/shots/`（已 gitignore），不是 `dist/`**。原因是
+`__kannz.html` 里内联着参考站（roadcode.kannz.com）的图片，版权归对方。
+
+只靠构建收尾的 `pruneStale()` 挡不住：它要等**下一次构建**才删遗留文件，
+中间留着一段窗口 ——
+
+```
+跑对照页 → 不重建、直接 wrangler deploy → 对照页连同参考站图片一起上线
+```
+
+（实测线上 `/__sheet.html` 是 404，但那只是因为文件比部署晚生成，是运气不是配置。）
+
+两道防线：
+
+1. 输出落到 `tests/shots/`，用 `file://` 打开截图，`dist/` 里根本不存在这些文件；
+2. `dist/.assetsignore` 里保留 `__*.html` 与 `research/`，万一以后又有人写进
+   `dist/`，上传阶段也会被排除。
+
+第 2 条已实测有效（`dist/` 里放 `__probe.html` → 本地 404，而同目录下
+未被排除的 `research-probe.txt` → 200，排除了「404 其实是服务坏了」这个解释）。
+`tests/live-security.cjs` 里有 `/__sheet.html`、`/__scenes.html`、`/__kannz.html`
+三条断言做回归。
 
 ### ⚠️ 构建脚本不做批量删除
 
@@ -337,9 +364,10 @@ BASE=https://nz-roadcode.2412.workers.dev npm test
 ```
 
 另外 `tests/live-security.cjs` 专门验证**构建目录隔离**是否真的生效 ——
-它会逐个请求 `.git/config`、`package.json`、`data/*.json`、`src/*` 等 28 个
-不该公开的路径，全部必须返回 404；一旦有一个返回 200，说明源码或提交历史
-已经挂在公网上了。新增开发脚本时记得往 `MUST_404` 里加一条：
+它会逐个请求 `.git/config`、`package.json`、`data/*.json`、`src/*`、
+`__sheet.html` 等 31 个不该公开的路径，全部必须返回 404；一旦有一个返回
+200，说明源码、提交历史或开发期对照页已经挂在公网上了。新增开发脚本或
+临时产物时记得往 `MUST_404` 里加一条：
 
 ```bash
 npm run test:live

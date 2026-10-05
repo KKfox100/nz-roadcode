@@ -4,7 +4,11 @@
  * 把抓下来的参考站示意图（research/kannz-img/）拼成一张对照页，
  * 用于和我们的自绘场景图横向比较。只做人工核对，不参与构建。
  *
- * 用法：node research/contact-sheet.cjs   → dist/__kannz.html
+ * 用法：node research/contact-sheet.cjs   → tests/shots/__kannz.html
+ *
+ * ⚠️ 输出**故意不落在 dist/**：这张对照页内联了参考站的图片（版权归对方），
+ * 放进 dist/ 就等于「跑完它再 deploy」会把对方的图推上线。放 tests/shots/
+ * （已 gitignore）+ file:// 打开，从根上没有这条路径。
  */
 
 const fs = require('fs');
@@ -23,7 +27,9 @@ const cells = files.map(f => {
   return `<figure><img src="data:image/png;base64,${b64}" alt="${id}"><figcaption>题 ${id}</figcaption></figure>`;
 }).join('\n');
 
-fs.writeFileSync(path.join(__dirname, '..', 'dist', '__kannz.html'), `<!DOCTYPE html>
+const OUT_DIR = path.join(__dirname, '..', 'tests', 'shots');
+fs.mkdirSync(OUT_DIR, { recursive: true });
+fs.writeFileSync(path.join(OUT_DIR, '__kannz.html'), `<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8"><title>参考站示意图</title><style>
   body{margin:0;padding:24px;background:#faf9f7;font-family:system-ui,"Microsoft YaHei",sans-serif;color:#33302c}
   h1{font-size:18px;margin:0 0 16px}
@@ -36,4 +42,4 @@ fs.writeFileSync(path.join(__dirname, '..', 'dist', '__kannz.html'), `<!DOCTYPE 
 <div class="grid">${cells}</div>
 </body></html>`);
 
-console.log(`已写出 dist/__kannz.html（${files.length} 张）`);
+console.log(`已写出 tests/shots/__kannz.html（${files.length} 张）`);

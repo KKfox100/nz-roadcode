@@ -1,23 +1,32 @@
 /**
  * 生成「全部图形」的对照页，用于一次性人工核对图示质量。
  *
- * 用法：node tools/figure-sheet.mjs           → dist/__sheet.html（全部图形）
- *      node tools/figure-sheet.mjs --scenes   → dist/__scenes.html（只放场景图，2 列大图）
+ * 用法：node tools/figure-sheet.mjs           → tests/shots/__sheet.html（全部图形）
+ *      node tools/figure-sheet.mjs --scenes   → tests/shots/__scenes.html（只放场景图，2 列大图）
  *
  * 为什么要这个：
  *   - 标线图单看一张很难判断比例对不对（条纹粗细、间隔、线宽是否够看清）
  *   - 场景图单看一张很难判断车在不在正确车道 —— 叠加车道参考线后，
  *     车有没有压中心线、有没有占到对向车道，一眼就能看出来
  * 排成网格横向对比才看得出哪个画歪了。
+ *
+ * ⚠️ 输出**故意不落在 dist/**。这两个对照页是开发期产物：`__kannz.html`
+ * 里内联着参考站（roadcode.kannz.com）的图片，版权归对方。写进 dist/ 就
+ * 意味着「跑完对照页再 deploy」会把它们推上线 —— pruneStale() 要等下一次
+ * 构建才删，中间那段窗口挡不住。放在 tests/shots/（已 gitignore）里，
+ * 再用 file:// 打开截图，就从根上没有了这条路径。
+ * dist/.assetsignore 里仍保留 `__*.html` 作为第二道防线。
  */
 
 import { diagrams, markings, thumbnails, diagramGuides } from '../src/images.mjs';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const OUT_DIR = join(ROOT, 'tests', 'shots');
 const SCENES_ONLY = process.argv.includes('--scenes');
+mkdirSync(OUT_DIR, { recursive: true });
 
 const cell = (k, svg, note) =>
   `<figure><div class="box">${svg}</div><figcaption>${k}<em>${note}</em></figcaption></figure>`;
@@ -57,15 +66,15 @@ const nScene = Object.keys(diagrams).length;
 const nMark = Object.keys(markings).length;
 
 if (SCENES_ONLY) {
-  writeFileSync(join(ROOT, 'dist', '__scenes.html'), `<!DOCTYPE html>
+  writeFileSync(join(OUT_DIR, '__scenes.html'), `<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8"><title>路口场景图</title><style>${CSS}</style></head><body>
 <h1>路口场景图（${nScene} 个）</h1>
 <p class="note">红=道路中心线，蓝=路缘。新西兰靠左行驶：北行占西半幅、东行占北半幅、南行占东半幅、西行占南半幅。</p>
 <div class="grid big">${scene}</div>
 </body></html>`);
-  console.log(`已写出 dist/__scenes.html（场景 ${nScene} 个，2 列大图）`);
+  console.log(`已写出 tests/shots/__scenes.html（场景 ${nScene} 个，2 列大图）`);
 } else {
-  writeFileSync(join(ROOT, 'dist', '__sheet.html'), `<!DOCTYPE html>
+  writeFileSync(join(OUT_DIR, '__sheet.html'), `<!DOCTYPE html>
 <html lang="zh"><head><meta charset="utf-8"><title>图示对照</title><style>${CSS}</style></head><body>
 <h1>图示对照</h1>
 <p class="note">场景图叠了参考线，用来核对「车在不在正确车道」——新西兰靠左行驶，北行占西半幅、东行占北半幅。</p>
@@ -80,5 +89,5 @@ if (SCENES_ONLY) {
 <p class="note">列表里只有 54px 宽，标线描边放大 3 倍才看得见。</p>
 <div class="grid">${thumb}</div>
 </body></html>`);
-  console.log(`已写出 dist/__sheet.html（场景 ${nScene} 个 + 标线 ${nMark} 个 × 2 版）`);
+  console.log(`已写出 tests/shots/__sheet.html（场景 ${nScene} 个 + 标线 ${nMark} 个 × 2 版）`);
 }

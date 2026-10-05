@@ -737,6 +737,15 @@ function buildMeta() {
 
   // 静态资源目录就是 dist/，里面只有站点文件；这个文件是防御性的，
   // 万一以后有人把构建脚本或仓库文件混进来，也不会被上传。
+  //
+  // ⚠️ `__*.html` 必须在这里排除，光靠 pruneStale() 不够。
+  // tools/figure-sheet.mjs 会把图示对照页写进 dist/（因为要能通过 wrangler dev
+  // 预览、截图），而对照页里**内联了参考站 roadcode.kannz.com 的图片**（版权归
+  // 对方）。pruneStale() 只在**下一次构建**时才删它，于是留下一个窗口：
+  //   跑对照页 → 不重建直接 wrangler deploy → 对照页连同参考站图片一起上线。
+  // 实测：部署完再跑对照页时线上是 404 —— 那是运气（文件比部署晚生成），
+  // 不是配置挡住了。这里排掉之后，上传阶段就不可能带上它。
+  // 回归由 tests/live-security.cjs 的 `/__*.html` 三条断言兜底。
   writeOut(join(DIST, '.assetsignore'),
     `.git/
 .gitignore
@@ -745,6 +754,8 @@ node_modules/
 .wrangler/
 src/
 data/
+research/
+__*.html
 *.md
 package.json
 package-lock.json

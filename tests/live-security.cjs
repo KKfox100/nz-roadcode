@@ -42,7 +42,14 @@ const MUST_404 = [
   '/tests/cdp-client.cjs',
   '/node_modules/.package-lock.json',
   '/.assetsignore',
-  '/.wrangler/state'
+  '/.wrangler/state',
+  // 图示对照页：由 tools/figure-sheet.mjs 写进 dist/ 以便本地预览，
+  // 里面内联了参考站（roadcode.kannz.com）的图片，版权归对方 —— 绝不能上线。
+  // 只靠构建收尾的 pruneStale() 挡不住（它要等下一次构建），必须在
+  // .assetsignore 里排除；这三条断言就是那个排除规则的回归测试。
+  '/__sheet.html',
+  '/__scenes.html',
+  '/__kannz.html'
 ];
 
 // 这些必须 200
