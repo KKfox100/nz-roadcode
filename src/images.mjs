@@ -484,8 +484,7 @@ export const markings = {
   'mark-yellow-box': () => `
     <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="黄色网格禁停区">
       <rect width="400" height="240" fill="${RB}"/>
-      <rect x="0" y="0" width="400" height="240" fill="${RM}"/>
-      <rect x="96" y="46" width="208" height="148" fill="${RM}"/>
+      <rect x="0" y="24" width="400" height="192" fill="${RM}"/>
       <rect x="96" y="46" width="208" height="148" fill="none" stroke="${RY}" stroke-width="6"/>
       <g stroke="${RY}" stroke-width="5" stroke-linecap="round">
         <line x1="96" y1="46" x2="200" y2="194"/>
@@ -497,12 +496,13 @@ export const markings = {
 
   'mark-zebra-crossing': () => `
     <svg viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="人行横道（斑马线）">
-      <rect width="400" height="240" fill="${RM}"/>
+      ${lane('')}
       <g fill="${RW}">
-        <rect x="132" y="16" width="26" height="208"/>
-        <rect x="174" y="16" width="26" height="208"/>
-        <rect x="216" y="16" width="26" height="208"/>
-        <rect x="258" y="16" width="26" height="208"/>
+        <rect x="83" y="60" width="34" height="120"/>
+        <rect x="133" y="60" width="34" height="120"/>
+        <rect x="183" y="60" width="34" height="120"/>
+        <rect x="233" y="60" width="34" height="120"/>
+        <rect x="283" y="60" width="34" height="120"/>
       </g>
     </svg>`,
 
@@ -558,6 +558,26 @@ export const markings = {
  * 刻意**不画进 SVG 里** —— 画在 SVG 内会和车辆标签抢位置（两者都在图的下方），
  * 而且中文字体在 SVG 里没有换行能力。放到 HTML 里排版更可控。
  */
+/* ---------- 缩略图专用的加粗版标线 ----------
+
+   列表里的缩略图只有几十像素宽。标线图的 viewBox 是 400 宽、线宽 7，
+   缩到 50px 时线只剩 0.9px —— 白线在浅色路面上直接消失，缩略图就成
+   了一块空白色块。
+
+   这里只把**标线本身**的描边放大（白色和黄色），不碰其他描边：
+   单车道桥那两张图里有个红圈让行标志，它的白边如果一起放大 3 倍
+   会变成一坨。所以按颜色精确匹配。
+*/
+const scaleMarkingStrokes = (svg, s) =>
+  svg.replace(
+    /stroke="(#ffffff|#f0b429)" stroke-width="([\d.]+)"/g,
+    (_, color, w) => `stroke="${color}" stroke-width="${+(parseFloat(w) * s).toFixed(2)}"`
+  );
+
+export const thumbnails = Object.fromEntries(
+  Object.entries(markings).map(([key, fn]) => [key, () => scaleMarkingStrokes(fn(), 3)])
+);
+
 export const captions = {
   'sv-crossroads': '无标志十字路口 · 蓝车直行，红车从右侧驶来',
   'sv-roundabout': '环岛 · 蓝车准备进入，红车已在环岛内',

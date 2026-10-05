@@ -631,7 +631,10 @@ body.is-focus .tabbar { display: none; }
   min-width: 24px; font-variant-numeric: tabular-nums;
 }
 .q-list .t { flex: 1; line-height: 1.55; }
+/* 缩略图：高度固定，宽度跟着图形长宽比走（1:1 标志 / 4:3 场景 / 5:3 标线） */
 .q-list .thumb { flex: none; width: 32px; height: 32px; }
+.q-list .thumb-43 { width: 43px; }
+.q-list .thumb-53 { width: 54px; }
 .q-list .thumb svg { display: block; width: 100%; height: 100%; }
 
 /* ==========================================================================

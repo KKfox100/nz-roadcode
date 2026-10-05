@@ -92,12 +92,15 @@ data/*.json        题库（8 个文件，每个分类一个，共 261 题）
 data/topics.json   官方考纲：46 个知识点（从 NZTA road code 章节提取）
 data/topic-map.json  早期题目的「题号 → 知识点」映射
 src/images.mjs     自绘 SVG 图示库：30 个标志 + 4 个路口场景 + 14 个道路标线
+                   （另导出 thumbnails：标线在列表里的加粗版）
 src/styles.css     样式表（手写，无框架；莫兰迪设计令牌 + H5 布局）
 src/app.js         前端交互：逐题学习 + 模拟考试
 tools/check-coverage.cjs  覆盖度体检（构建时自动跑，也可单独执行）
+tools/markings-sheet.mjs  生成标线对照页，人工核对图示质量
 build.mjs          构建脚本：把题库渲染成静态站点到 dist/
 dist/              构建产物（= Cloudflare 静态资源目录，已 gitignore）
-tests/e2e.cjs      端到端测试（真实 Chrome + CDP，125 项断言）
+tests/e2e.cjs      端到端测试（真实 Chrome + CDP，130 项断言）
+tests/live-security.cjs  线上安全检查（源码/数据文件不可访问）
 wrangler.jsonc     Cloudflare Workers 部署配置
 research/          抓官方题目的研究脚本与原始 HTML（不部署，仅供核对）
 ```
@@ -126,6 +129,32 @@ research/          抓官方题目的研究脚本与原始 HTML（不部署，�
 
 配色沿用同一套：路面 `#cbd5e1`，白色标线 `#ffffff`，黄色标线 `#f0b429`，
 路面以外背景 `#f1f5f9`。
+
+### 列表缩略图要单独一套加粗版
+
+题目列表里的小缩略图只有几十像素宽。标线图的 viewBox 是 400 宽、线宽 7，
+缩到 54px 时线只剩 0.9px —— 白线在浅色路面上直接消失，缩略图就变成一块
+空白色块。**光把缩略图放大不够，得把线加粗。**
+
+所以 `src/images.mjs` 除了 `markings`（完整图）还导出 `thumbnails`
+（加粗版），构建期分别写进 `window.RC_IMAGES` 和 `window.RC_THUMBS`，
+`app.js` 在列表里优先取加粗版。加粗时**按颜色精确匹配**
+（只放大 `#ffffff` / `#f0b429` 两种标线描边）—— 单车道桥那两张图里有个
+红圈让行标志，它的白边如果跟着放大 3 倍会变成一坨。
+
+缩略图宽度还必须跟着长宽比走（标志 1:1 / 场景 4:3 / 标线 5:3），
+一律塞进 32×32 会把标线压扁。`build.mjs` 的 `thumbSpan()` 按 key 前缀
+给 `thumb-43` / `thumb-53` 类名。
+
+改完图示想一次性检查质量，跑：
+
+```bash
+node tools/markings-sheet.mjs     # 生成 dist/__sheet.html：14 个标线 × 完整/加粗 两版并排
+BASE=http://127.0.0.1:8792 node tools/shot-live.cjs --sheet   # 截图到 tests/shots/markings-sheet.png
+```
+
+单看一张图很难判断比例对不对（条纹粗细、间隔、线宽够不够看清），
+排成网格横向对比才看得出哪个画歪了。
 
 ### ⚠️ 构建脚本不做批量删除
 

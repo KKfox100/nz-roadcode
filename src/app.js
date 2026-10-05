@@ -90,7 +90,9 @@
   function hydrateThumbs() {
     Array.prototype.forEach.call(document.querySelectorAll('[data-thumb]'), function (node) {
       var key = node.getAttribute('data-thumb');
-      if (IMAGES[key]) node.innerHTML = IMAGES[key];
+      // 缩略图优先用加粗版：标线在几十像素宽下细线会消失
+      var svg = (window.RC_THUMBS || {})[key] || IMAGES[key];
+      if (svg) node.innerHTML = svg;
     });
   }
 

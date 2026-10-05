@@ -135,6 +135,43 @@ async function waitStyled(b) {
     check('每个标志题都渲染出缩略图', cat.thumbs === loadCat('sign').questions.length, 'got ' + cat.thumbs);
     await b.shot('tests/shots/03-category.png');
 
+    /* ---------------- 3b. 标线缩略图 ----------------
+       列表缩略图只有几十像素宽，标线的 7px 细线缩下去不足 1px 会直接消失。
+       所以构建期另外生成了一套加粗版（window.RC_THUMBS）。这里守住两件事：
+       缩略图确实用的是加粗版，而且宽度跟着 5:3 的长宽比走（不被压成正方形）。 */
+    console.log('\n[3b] 标线缩略图 /study/road-position/');
+    await b.goto(BASE + '/study/road-position/');
+    check('样式表已生效', await waitStyled(b));
+    const mk = await b.eval(`(() => {
+      var node = document.querySelector('.q-list .thumb[data-thumb^="mark-"]');
+      if (!node) return null;
+      var key = node.getAttribute('data-thumb');
+      var thumbs = window.RC_THUMBS || {}, full = (window.RC_IMAGES || {})[key] || '';
+      var thick = thumbs[key] || '';
+      var norm = function (s) { return s.replace(/\\s+/g, ''); };
+      var maxStroke = function (s) {
+        var m = s.match(/stroke-width="[\\d.]+"/g) || [];
+        return m.reduce(function (a, x) { return Math.max(a, parseFloat(x.match(/[\\d.]+/)[0])); }, 0);
+      };
+      var r = node.getBoundingClientRect();
+      // 不能拿字符串全等判断：innerHTML 会把 <line/> 这类自闭合标签展开成
+      // <line></line>，跟源字符串永远不等。比实际描边粗细才靠谱。
+      return {
+        key: key, cls: node.className,
+        rendered: maxStroke(node.innerHTML),
+        thumb: maxStroke(thick),
+        full: maxStroke(full),
+        ratio: r.width / r.height,
+        w: Math.round(r.width), h: Math.round(r.height)
+      };
+    })()`);
+    check('标线题在列表里有缩略图', !!mk, '没找到 .thumb[data-thumb^="mark-"]');
+    check('缩略图用的是加粗版标线', !!mk && mk.thumb > 0 && mk.rendered === mk.thumb,
+      mk ? `渲染 ${mk.rendered} vs 加粗版 ${mk.thumb}` : '');
+    check('加粗版描边确实比完整图粗', !!mk && mk.thumb > mk.full, mk ? `加粗 ${mk.thumb} vs 完整 ${mk.full}` : '');
+    check('缩略图按 5:3 长宽比，没被压扁', !!mk && Math.abs(mk.ratio - 400 / 240) < 0.15,
+      mk ? mk.w + 'x' + mk.h : '');
+
     /* ---------------- 4. 单题页 ---------------- */
     console.log('\n[4] 单题页');
     await b.goto(BASE + '/study/question/sign-01/');

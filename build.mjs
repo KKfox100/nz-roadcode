@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { allImages, renderImage, captions } from './src/images.mjs';
+import { allImages, thumbnails, renderImage, captions } from './src/images.mjs';
 
 /**
  * ⚠️ 环境约束：**不要在这个脚本里批量删除文件**（也不要写回 "先清空 dist 再重建"）。
@@ -255,6 +255,17 @@ function questionFigure(q, wide) {
     cap ? `<p class="fig-cap">${esc(cap)}</p>` : ''}</div>`;
 }
 
+/**
+ * 列表里的小缩略图。尺寸必须跟着图形长宽比走：
+ * 标志牌是 1:1，场景图是 4:3，标线是 5:3 的俯视图。
+ * 一律塞进 32×32 的方框会把标线压扁，而且线宽缩到不足 1px 就看不见了。
+ */
+function thumbSpan(key) {
+  const shape = key.startsWith('mark-') ? ' thumb-53'
+    : key.startsWith('sv-') ? ' thumb-43' : '';
+  return `<span class="thumb${shape}" data-thumb="${key}"></span>`;
+}
+
 function breadcrumbs(items, depth) {
   const r = rel(depth);
   return `<nav class="crumbs" aria-label="面包屑">${items.map((it, i) => {
@@ -384,7 +395,7 @@ function buildStudyIndex() {
         ${c.questions.map((q, i) => `<li><a href="study/question/${q.id}/">
           <span class="n">${i + 1}</span>
           <span class="t">${esc(q.q)}</span>
-          ${q.image ? `<span class="thumb" data-thumb="${q.image}"></span>` : ''}
+          ${q.image ? thumbSpan(q.image) : ''}
         </a></li>`).join('\n        ')}
       </ul>
     </div>`).join('\n    ')}
@@ -425,7 +436,7 @@ function buildCategoryPage(cat) {
       ${cat.questions.map((q, i) => `<li><a href="../question/${q.id}/">
         <span class="n">${i + 1}</span>
         <span class="t">${esc(q.q)}</span>
-        ${q.image ? `<span class="thumb" data-thumb="${q.image}"></span>` : ''}
+        ${q.image ? thumbSpan(q.image) : ''}
       </a></li>`).join('\n      ')}
     </ul>
   </section>
@@ -643,9 +654,13 @@ function buildAssets() {
   // 图示库：key -> SVG 字符串（标志牌 + 路口场景 + 道路标线）
   const imgMap = {};
   Object.keys(allImages).forEach(k => { imgMap[k] = allImages[k](); });
+  // 缩略图专用（加粗版标线），见 src/images.mjs 的说明
+  const thumbMap = {};
+  Object.keys(thumbnails).forEach(k => { thumbMap[k] = thumbnails[k](); });
   writeOut(join(DIST, 'assets', 'images.js'),
     '/* 自绘 SVG 图示库（构建产物，请勿手改） */\n'
     + 'window.RC_IMAGES = ' + JSON.stringify(imgMap) + ';\n'
+    + 'window.RC_THUMBS = ' + JSON.stringify(thumbMap) + ';\n'
     + 'window.RC_CAPTIONS = ' + JSON.stringify(captions) + ';\n');
 
   // 题库：给前端交互使用
