@@ -177,11 +177,16 @@ fi
 # ---------- 3. 上传 blob ----------
 echo "上传 blob..."
 : > "$TMP/blobs.json"
+# ⚠ 上传的必须是**提交里的内容**，不是工作区的文件。
+# 用 `git cat-file blob HEAD:<path>` 而非直接读文件 —— 后者会把未提交的
+# 本地改动一起推上去（实测踩过：编辑过工具脚本后运行，远端返回的 blob sha
+# 与 HEAD 里的不符，说明推的是工作区版本）。校验比对的是 HEAD 的 sha，
+# 所以读工作区会直接被那道闸拦下 —— 但正确做法是读提交内容。
 while IFS= read -r line; do
   [ -z "$line" ] && continue
   p="$(printf '%s' "$line" | "$NODE_BIN" -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).path)")"
   want="$(printf '%s' "$line" | "$NODE_BIN" -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).sha)")"
-  b64="$(base64 -w0 "$p")"
+  b64="$(git cat-file blob "HEAD:$p" | base64 -w0)"
   resp="$(curl -sS -X POST "$API/repos/$REPO/git/blobs" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Accept: application/vnd.github+json" \
@@ -189,9 +194,9 @@ while IFS= read -r line; do
     -d "{\"content\":\"$b64\",\"encoding\":\"base64\"}")"
   sha="$(printf '%s' "$resp" | "$NODE_BIN" -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.sha){console.error(JSON.stringify(j));process.exit(1)}process.stdout.write(j.sha)})")"
   if [ "$sha" = "$want" ]; then
-    echo "  $p  ${sha:0:9}  ✓ 与本地一致"
+    echo "  $p  ${sha:0:9}  ✓ 与提交内容一致"
   else
-    echo "  ✗ $p blob sha 不符：远端 ${sha:0:9} / 期望 ${want:0:9}" >&2
+    echo "  ✗ $p blob sha 不符：远端 ${sha:0:9} / 提交里 ${want:0:9}" >&2
     exit 1
   fi
   printf '{"path":"%s","remoteSha":"%s"}\n' "$p" "$sha" >> "$TMP/blobs.json"
@@ -199,6 +204,9 @@ done < "$TMP/changed.json"
 
 # ---------- 4. 建 tree ----------
 export REPO TOKEN API AUTHOR_NAME AUTHOR_EMAIL AUTHOR_DATE
+# ⚠ 这里同时用了 require() 和 await。Node 从 stdin 读代码时若见到**顶层 await**
+# 会猜"这是 ESM"，可又发现了 require()，于是抛 ERR_AMBIGUOUS_MODULE_SYNTAX。
+# 解决：把 await 包进 async IIFE —— 顶层没有 await，判定为 CommonJS。
 "$NODE_BIN" - <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -207,6 +215,8 @@ const REPO = process.env.REPO;
 const TOKEN = process.env.TOKEN;
 const API = process.env.API;
 const BRANCH = process.env.BRANCH;
+
+(async () => {
 
 const TREES = {};
 let cur = null;
@@ -314,6 +324,10 @@ await api('PATCH', `/repos/${REPO}/git/refs/heads/${BRANCH}`, { sha: NEW_COMMIT.
 const after = await api('GET', `/repos/${REPO}/git/ref/heads/${BRANCH}`);
 console.log(`远端 ${BRANCH}  =`, after.object.sha);
 console.log(after.object.sha === NEW_COMMIT.sha ? '\n✓✓ 推送成功' : '\n⚠ 请核对');
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
 NODE
 
 echo ""
