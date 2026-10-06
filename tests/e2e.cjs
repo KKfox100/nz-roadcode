@@ -920,6 +920,31 @@ async function waitStyled(b) {
     })()`);
     check('各语言下均无横向溢出', langOverflow.every(x => x.over <= 1), JSON.stringify(langOverflow));
 
+    // 窄屏下切换器仍要可点（44px 触摸目标）+ 不挤出横向滚动
+    await b.setMobile(390, 844);
+    await b.goto(BASE + '/');
+    await waitStyled(b);
+    const mobLang = await b.eval(`(() => {
+      const btns = Array.from(document.querySelectorAll('.lang-switch [data-lang]'));
+      const rects = btns.map(x => x.getBoundingClientRect());
+      const hd = document.querySelector('.site-header');
+      return {
+        n: btns.length,
+        minH: rects.length ? Math.round(Math.min.apply(null, rects.map(r => r.height))) : 0,
+        minW: rects.length ? Math.round(Math.min.apply(null, rects.map(r => r.width))) : 0,
+        headerH: hd ? Math.round(hd.getBoundingClientRect().height) : 0,
+        visible: btns.length ? getComputedStyle(btns[0]).display !== 'none' : false,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+      };
+    })()`);
+    check('窄屏切换器仍可见', mobLang.visible && mobLang.n === 5, JSON.stringify(mobLang));
+    check('窄屏切换器触摸目标 ≥44px（高度）', mobLang.minH >= 44, 'h=' + mobLang.minH + ' w=' + mobLang.minW);
+    check('切换器不挤压顶栏', mobLang.headerH === 56, 'headerH=' + mobLang.headerH);
+    check('窄屏语言切换无横向溢出', mobLang.overflow <= 1, 'overflow=' + mobLang.overflow);
+    await b.clearMobile();
+    await b.goto(BASE + '/');
+    await waitStyled(b);
+
     /* ---------------- 13. console 错误 ---------------- */
     console.log('\n[13] 控制台错误');
     const errs = b.consoleErrors().filter(e => !/favicon/i.test(e));

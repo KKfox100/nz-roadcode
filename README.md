@@ -174,7 +174,7 @@ tools/figure-sheet.mjs    生成图示对照页到 tests/shots/（场景图叠�
 tools/shot-live.cjs       抓页面截图（--questions / --sheet / --scenes / --kannz）
 build.mjs          构建脚本：把题库渲染成静态站点到 dist/
 dist/              构建产物（= Cloudflare 静态资源目录，已 gitignore）
-tests/e2e.cjs      端到端测试（真实 Chrome + CDP，179 项断言）
+tests/e2e.cjs      端到端测试（真实 Chrome + CDP，185 项断言）
 tests/live-security.cjs  线上安全检查（源码/数据文件不可访问）
 wrangler.jsonc     Cloudflare Workers 部署配置
 research/          研究脚本与原始素材（不部署，仅供核对）

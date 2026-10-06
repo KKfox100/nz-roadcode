@@ -258,10 +258,16 @@ p:last-child { margin-bottom: 0; }
   .lang-full { display: inline; }
 }
 
-/* 手机横窄时顶栏空间紧张：切换器只留缩写，且不外扩 */
+/* 手机横窄时顶栏空间紧张：切换器只留缩写，且不外扩。
+   触摸目标仍要 ≥44px（WCAG 2.5.5 / Apple HIG）—— 靠 padding 撑高度，
+   视觉上看着紧凑，点按范围足够。5 个缩写按钮也塞得下 320px。 */
 @media (max-width: 420px) {
   .lang-switch { margin-left: auto; padding: 2px; gap: 0; }
-  .lang-switch button { min-height: 28px; padding: 0 7px; font-size: .74rem; }
+  .lang-switch button { min-height: 44px; padding: 0 6px; font-size: .74rem; }
+}
+@media (min-width: 421px) and (max-width: 899px) {
+  /* 平板/大手机：显缩写，但同样满足 44px 触摸目标 */
+  .lang-switch button { min-height: 44px; padding: 0 10px; }
 }
 
 /* ==========================================================================
