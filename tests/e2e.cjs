@@ -780,6 +780,8 @@ async function waitStyled(b) {
         catName: (document.querySelector('.cat-card h3') || {}).textContent || '',
         catMeta: (document.querySelector('.cat-card .cat-meta') || {}).textContent || '',
         examMeta: (document.querySelector('.exam-card .exam-meta') || {}).textContent || '',
+        examLabel: (document.querySelector('.exam-card h3') || {}).textContent || '',
+        examDesc: (document.querySelector('.exam-card > p') || {}).textContent || '',
         figCap: (document.querySelector('.hero-art .fig-cap') || {}).textContent || '',
         active: Array.from(document.querySelectorAll('.lang-switch .is-active')).map(x => x.getAttribute('data-lang')),
         stored: localStorage.getItem('rc-locale'),
@@ -793,6 +795,9 @@ async function waitStyled(b) {
     check('切英文后分类名变英文', en.catName.length > 0 && !/[\u4e00-\u9fa5]/.test(en.catName), en.catName);
     check('切英文后分类题数文案变英文', /questions/.test(en.catMeta), en.catMeta);
     check('切英文后考试卡片文案变英文', /min|pass mark/.test(en.examMeta), en.examMeta);
+    check('切英文后考试卡片标题变英文', /Short test/i.test(en.examLabel), en.examLabel);
+    check('切英文后考试卡片说明变英文',
+      en.examDesc.length > 0 && !/[\u4e00-\u9fa5]/.test(en.examDesc), en.examDesc.slice(0, 50));
     check('切英文后首页场景图注变英文',
       /Crossroads|blue car/i.test(en.figCap) && !/[\u4e00-\u9fa5]/.test(en.figCap), en.figCap);
     check('切英文后切换器高亮切到 en', en.active.length === 1 && en.active[0] === 'en', JSON.stringify(en.active));

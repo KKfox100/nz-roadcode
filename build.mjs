@@ -138,7 +138,7 @@ const EXAMS = [
   { count: 20, label: '中度模拟', desc: '覆盖主要知识点的中等强度练习。' },
   { count: 35, label: '正式考试模拟', desc: '与新西兰驾照理论考试题量一致，通过线为答对 32 题。' },
   { count: 50, label: '全面模拟', desc: '最大范围的综合测试，适合考前冲刺。' }
-];
+].map(e => ({ ...e, key: 'exam.e' + e.count }));
 
 /* ---------- 图标 ---------- */
 
@@ -370,8 +370,8 @@ function buildHome() {
     <div class="grid grid-4">
       ${EXAMS.map(e => `<div class="exam-card${e.count === 35 ? ' featured' : ''}">
         <span class="exam-num">${e.count}</span>
-        <h3>${esc(e.label)}</h3>
-        <p>${esc(e.desc)}</p>
+        <h3 data-i18n="${e.key}.label">${esc(e.label)}</h3>
+        <p data-i18n="${e.key}.desc">${esc(e.desc)}</p>
         <span class="exam-meta" data-i18n="home.examMeta" data-t="${Math.round(Math.max(300, e.count * 54) / 60)}" data-n="${Math.ceil(e.count * 0.9)}">限时 ${Math.round(Math.max(300, e.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(e.count * 0.9)} 题</span>
         <a class="btn ${e.count === 35 ? 'btn-primary' : 'btn-ghost'}" href="exam/${e.count}/" data-i18n="home.startThisExam">开始考试</a>
       </div>`).join('\n      ')}
@@ -608,8 +608,8 @@ function buildExamIndex() {
     <div class="grid grid-4" style="margin-top:26px">
       ${EXAMS.map(e => `<div class="exam-card${e.count === 35 ? ' featured' : ''}">
         <span class="exam-num">${e.count}</span>
-        <h3>${esc(e.label)}</h3>
-        <p>${esc(e.desc)}</p>
+        <h3 data-i18n="${e.key}.label">${esc(e.label)}</h3>
+        <p data-i18n="${e.key}.desc">${esc(e.desc)}</p>
         <p style="font-size:.82rem;color:var(--ink-4)" data-i18n="home.examMeta" data-t="${Math.round(Math.max(300, e.count * 54) / 60)}" data-n="${Math.ceil(e.count * 0.9)}">限时 ${Math.round(Math.max(300, e.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(e.count * 0.9)} 题</p>
         <a class="btn ${e.count === 35 ? 'btn-primary' : 'btn-ghost'}" href="${e.count}/" data-i18n="exam.start">开始考试</a>
       </div>`).join('\n      ')}
@@ -637,7 +637,7 @@ function buildExamPage(exam) {
   const body = `<div class="wrap">
   ${breadcrumbs([{ label: '首页', href: '', i18n: 'nav.home' }, { label: '模拟考试', href: 'exam/', i18n: 'nav.exam' }, { label: `${exam.count} 题`, i18n: 'exam.countLabel', n: exam.count }], depth)}
   <section style="padding:18px 0 8px">
-    <h1 style="font-size:1.5rem;margin-bottom:4px">${esc(exam.label)}（<span data-i18n="exam.countLabel" data-n="${exam.count}">${exam.count} 题</span>）</h1>
+    <h1 style="font-size:1.5rem;margin-bottom:4px"><span data-i18n="${exam.key}.label">${esc(exam.label)}</span>（<span data-i18n="exam.countLabel" data-n="${exam.count}">${exam.count} 题</span>）</h1>
     <p style="color:var(--ink-3);font-size:.9rem;margin:0"><span data-i18n="exam.pageMeta" data-t="${Math.round(Math.max(300, exam.count * 54) / 60)}" data-n="${Math.ceil(exam.count * 0.9)}">限时 ${Math.round(Math.max(300, exam.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(exam.count * 0.9)} 题 · 交卷后可逐题回顾</span></p>
   </section>
   <div id="rc-app" data-mode="exam" data-count="${exam.count}"></div>
