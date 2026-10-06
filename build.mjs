@@ -14,6 +14,13 @@ import {
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { allImages, thumbnails, renderImage, captions } from './src/images.mjs';
+import {
+  LOCALES, LOCALE_NATIVE, LOCALE_SHORT, LOCALE_HTML_LANG, LOCALE_OG,
+  UI, CATEGORY_NAME, CATEGORY_SUMMARY, buildContent
+} from './src/i18n.mjs';
+import { EN } from './src/i18n-content.mjs';
+import { JA } from './src/i18n-ja.mjs';
+import { KO } from './src/i18n-ko.mjs';
 
 /**
  * ⚠️ 环境约束：**不要在这个脚本里批量删除文件**（也不要写回 "先清空 dist 再重建"）。
@@ -166,25 +173,55 @@ const rel = depth => '../'.repeat(depth);
  * back    —— { href, label } 子页返回目标；移动端会在顶栏左侧出现返回按钮
  * focus   —— 答题模式：移动端隐藏站点框架（顶栏/页脚/标签栏），把屏幕让给题目
  */
-function layout({ title, description, path, depth, body, head = '', nav = '', back = null, focus = false }) {
+/**
+ * 语言切换器（顶栏桌面端 / 移动端共用一份标记，靠 CSS 决定呈现）。
+ * 用 <button data-lang>，由 assets/i18n-runtime.js 接管：切换只改 DOM，不重新请求。
+ */
+function langSwitcher() {
+  const items = LOCALES.map(loc =>
+    `<button type="button" data-lang="${loc}" title="${esc(LOCALE_NATIVE[loc])}">`
+    + `<span class="lang-full">${esc(LOCALE_NATIVE[loc])}</span>`
+    + `<span class="lang-short">${esc(LOCALE_SHORT[loc])}</span></button>`
+  ).join('');
+  return `<div class="lang-switch" role="group" aria-label="${esc(UI['zh-Hans']['nav.langSwitcher'])}">${items}</div>`;
+}
+
+/** hreflang 备用入口：同一 URL 的 5 个语言版本。 */
+function hreflangLinks(path) {
+  const url = SITE_URL + path;
+  const rows = LOCALES.map(loc =>
+    `<link rel="alternate" hreflang="${LOCALE_HTML_LANG[loc]}" href="${esc(url)}">`
+  );
+  rows.push(`<link rel="alternate" hreflang="x-default" href="${esc(url)}">`);
+  return rows.join('\n');
+}
+
+function layout({ title, titleKey, titleKeyCat, description, path, depth, body, head = '', nav = '', back = null, focus = false }) {
   const r = rel(depth);
   const canonical = SITE_URL + path;
   const fullTitle = title === SITE_NAME ? title : `${title} | ${SITE_NAME}`;
   const cur = k => (nav === k ? ' aria-current="page"' : '');
+  // 构建期渲染简体中文（canonical 视图）；其余语言由 assets/i18n-runtime.js 在运行时切换。
+  const dl = 'zh-Hans';
+  // 允许页面指定一个 UI 键让 <title> 也随语言变化（运行时由 i18n-runtime 重写）
+  const titleAttr = titleKey
+    ? ` data-i18n-title="${titleKey}"${titleKeyCat ? ` data-cat="${titleKeyCat}"` : ''} data-i18n-title-suffix="${esc(' | ' + SITE_NAME)}"`
+    : '';
 
   const backLink = back
-    ? `<a class="back-link" href="${r}${back.href}" aria-label="返回${esc(back.label)}">${icon('back', 17)}</a>`
+    ? `<a class="back-link" href="${r}${back.href}" aria-label="返回${esc(back.label)}" data-i18n-aria="nav.backTo">${icon('back', 17)}<span hidden${back.cat ? ` data-i18n-cat="name" data-cat="${back.cat}"` : back.i18n ? ` data-i18n="${back.i18n}"` : ''} class="back-target">${esc(back.label)}</span></a>`
     : '';
 
   return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${LOCALE_HTML_LANG[dl]}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>${esc(fullTitle)}</title>
+<title${titleAttr}>${esc(fullTitle)}</title>
 <meta name="description" content="${esc(description)}">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="${esc(canonical)}">
+${hreflangLinks(path)}
 <meta name="theme-color" content="#f5f2ef">
 <meta name="format-detection" content="telephone=no">
 <meta property="og:type" content="website">
@@ -192,7 +229,8 @@ function layout({ title, description, path, depth, body, head = '', nav = '', ba
 <meta property="og:title" content="${esc(fullTitle)}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${esc(canonical)}">
-<meta property="og:locale" content="zh_CN">
+<meta property="og:locale" content="${LOCALE_OG[dl]}">
+${LOCALES.filter(l => l !== dl).map(l => `<meta property="og:locale:alternate" content="${LOCALE_OG[l]}">`).join('\n')}
 <link rel="icon" href="${r}assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="${r}assets/styles.css">
 ${head}
@@ -203,31 +241,34 @@ ${head}
     ${backLink}
     <a class="brand" href="${r}">
       <span class="brand-mark">RC</span>
-      <span class="brand-text">${esc(SITE_NAME)}<span class="brand-sub">NEW ZEALAND ROAD CODE</span></span>
+      <span class="brand-text" data-i18n="site.name">${esc(SITE_NAME)}<span class="brand-sub">NEW ZEALAND ROAD CODE</span></span>
     </a>
-    <nav class="site-nav" aria-label="主导航">
-      <a href="${r}study/"${cur('study')}>理论学习</a>
-      <a href="${r}exam/"${cur('exam')}>模拟考试</a>
-      <a class="cta" href="${r}exam/35/">开始模拟考</a>
+    <nav class="site-nav" aria-label="主导航" data-i18n-aria="nav.mainNav">
+      <a href="${r}study/" data-i18n="nav.study"${cur('study')}>理论学习</a>
+      <a href="${r}exam/" data-i18n="nav.exam"${cur('exam')}>模拟考试</a>
+      <a class="cta" href="${r}exam/35/" data-i18n="nav.startExam">开始模拟考</a>
     </nav>
+    ${langSwitcher()}
   </div>
 </header>
 ${body}
 <footer class="site-footer">
   <div class="wrap">
-    <p>${esc(SITE_NAME)} · 新西兰交规理论学习和模拟考试</p>
-    <nav aria-label="页脚导航">
-      <a href="${r}study/">理论学习</a>
-      <a href="${r}exam/">模拟考试</a>
-      <a href="${r}about/">关于本站</a>
+    <p data-i18n="site.tagline">${esc(SITE_NAME)} · 新西兰交规理论学习和模拟考试</p>
+    <nav aria-label="页脚导航" data-i18n-aria="nav.footerNav">
+      <a href="${r}study/" data-i18n="nav.study">理论学习</a>
+      <a href="${r}exam/" data-i18n="nav.exam">模拟考试</a>
+      <a href="${r}about/" data-i18n="nav.about">关于本站</a>
     </nav>
   </div>
 </footer>
-<nav class="tabbar" aria-label="底部导航">
-  <a href="${r}"${cur('home')}>${icon('home', 21)}<span>首页</span></a>
-  <a href="${r}study/"${cur('study')}>${icon('book', 21)}<span>理论学习</span></a>
-  <a href="${r}exam/"${cur('exam')}>${icon('clipboard', 21)}<span>模拟考试</span></a>
+<nav class="tabbar" aria-label="底部导航" data-i18n-aria="nav.tabbar">
+  <a href="${r}"${cur('home')}>${icon('home', 21)}<span data-i18n="nav.home">首页</span></a>
+  <a href="${r}study/"${cur('study')}>${icon('book', 21)}<span data-i18n="nav.study">理论学习</span></a>
+  <a href="${r}exam/"${cur('exam')}>${icon('clipboard', 21)}<span data-i18n="nav.exam">模拟考试</span></a>
 </nav>
+<script src="${r}assets/i18n.js"></script>
+<script src="${r}assets/i18n-runtime.js"></script>
 <script src="${r}assets/images.js"></script>
 <script src="${r}assets/questions.js"></script>
 <script src="${r}assets/app.js"></script>
@@ -239,12 +280,12 @@ ${body}
 
 function catCard(cat, depth) {
   const r = rel(depth);
-  return `<a class="cat-card" href="${r}study/${cat.id}/">
+  return `<a class="cat-card" href="${r}study/${cat.id}/" data-cat="${cat.id}">
     <span class="cat-icon" style="background:${cat.color}1a;color:${cat.color}">${icon(cat.icon)}</span>
-    <h3>${esc(cat.name)}</h3>
+    <h3 data-i18n-cat="name">${esc(cat.name)}</h3>
     <span class="cat-en">${esc(cat.nameEn)}</span>
-    <p>${esc(cat.summary)}</p>
-    <span class="cat-meta">共 ${cat.questions.length} 题 →</span>
+    <p data-i18n-cat="summary">${esc(cat.summary)}</p>
+    <span class="cat-meta" data-i18n="study.catMeta" data-n="${cat.questions.length}">共 ${cat.questions.length} 题 →</span>
   </a>`;
 }
 
@@ -252,7 +293,7 @@ function questionFigure(q, wide) {
   if (!q.image) return '';
   const cap = captions[q.image];
   return `<div class="q-figure${wide ? ' wide' : ''}">${renderImage(q.image)}${
-    cap ? `<p class="fig-cap">${esc(cap)}</p>` : ''}</div>`;
+    cap ? `<p class="fig-cap" data-i18n="cap.${esc(q.image)}">${esc(cap)}</p>` : ''}</div>`;
 }
 
 /**
@@ -268,10 +309,13 @@ function thumbSpan(key) {
 
 function breadcrumbs(items, depth) {
   const r = rel(depth);
-  return `<nav class="crumbs" aria-label="面包屑">${items.map((it, i) => {
+  return `<nav class="crumbs" aria-label="面包屑" data-i18n-aria="nav.breadcrumb">${items.map((it, i) => {
     const last = i === items.length - 1;
-    if (last || !it.href) return `<span aria-current="page">${esc(it.label)}</span>`;
-    return `<a href="${r}${it.href}">${esc(it.label)}</a>`;
+    const a = it.cat ? ` data-i18n-cat="name" data-cat="${it.cat}"`
+      : it.i18n ? ` data-i18n="${it.i18n}"${it.n != null ? ` data-n="${it.n}"` : ''}`
+      : '';
+    if (last || !it.href) return `<span aria-current="page"${a}>${esc(it.label)}</span>`;
+    return `<a href="${r}${it.href}"${a}>${esc(it.label)}</a>`;
   }).join('<span>/</span>')}</nav>`;
 }
 
@@ -287,18 +331,18 @@ function buildHome() {
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <span class="pill">新西兰驾照理论考试 · 中文题库</span>
-      <h1>新西兰交规<br><em>理论学习和模拟考试</em></h1>
-      <p class="hero-lede">按新西兰官方道路规则整理的 8 个学习分类、共 ${TOTAL_QUESTIONS} 道中文试题。逐题即时判分、每题都有解析，配合四种题量的模拟考试，帮你把规则真正弄懂，而不是死记答案。</p>
+      <span class="pill" data-i18n="home.badge">新西兰驾照理论考试 · 中文题库</span>
+      <h1><span data-i18n="home.h1a">新西兰交规</span><br><em data-i18n="home.h1b">理论学习和模拟考试</em></h1>
+      <p class="hero-lede" data-i18n="home.lede" data-n="${TOTAL_QUESTIONS}">按新西兰官方道路规则整理的 8 个学习分类、共 ${TOTAL_QUESTIONS} 道中文试题。逐题即时判分、每题都有解析，配合四种题量的模拟考试，帮你把规则真正弄懂，而不是死记答案。</p>
       <div class="hero-actions">
-        <a class="btn btn-primary btn-lg" href="exam/35/">开始正式考试模拟</a>
-        <a class="btn btn-ghost btn-lg" href="study/">分类理论学习</a>
+        <a class="btn btn-primary btn-lg" href="exam/35/" data-i18n="home.startExam">开始正式考试模拟</a>
+        <a class="btn btn-ghost btn-lg" href="study/" data-i18n="home.startStudy">分类理论学习</a>
       </div>
       <div class="hero-stats">
-        <div class="hero-stat"><b>${TOTAL_QUESTIONS}</b><span>道原创试题</span></div>
-        <div class="hero-stat"><b>8</b><span>个知识分类</span></div>
-        <div class="hero-stat"><b>4</b><span>种模拟题量</span></div>
-        <div class="hero-stat"><b>0</b><span>广告与追踪</span></div>
+        <div class="hero-stat"><b>${TOTAL_QUESTIONS}</b><span data-i18n="home.statQuestions">道原创试题</span></div>
+        <div class="hero-stat"><b>${categories.length}</b><span data-i18n="home.statCategories">个知识分类</span></div>
+        <div class="hero-stat"><b>${EXAMS.length}</b><span data-i18n="home.statExamSizes">种模拟题量</span></div>
+        <div class="hero-stat"><b>0</b><span data-i18n="home.statNoAds">广告与追踪</span></div>
       </div>
     </div>
     <div class="hero-art">${questionFigure({ image: 'sv-crossroads' }, true)}</div>
@@ -308,8 +352,8 @@ function buildHome() {
 <section class="section">
   <div class="wrap">
     <div class="section-head">
-      <h2>理论学习</h2>
-      <p>按知识领域分块，先弄懂再做题</p>
+      <h2 data-i18n="home.studyHead">理论学习</h2>
+      <p data-i18n="home.studySub">按知识领域分块，先弄懂再做题</p>
     </div>
     <div class="grid grid-3">
       ${categories.map(c => catCard(c, depth)).join('\n      ')}
@@ -320,16 +364,16 @@ function buildHome() {
 <section class="section section-tint">
   <div class="wrap">
     <div class="section-head">
-      <h2>模拟考试</h2>
-      <p>随机抽题，计时作答，交卷后逐题回顾</p>
+      <h2 data-i18n="home.examHead">模拟考试</h2>
+      <p data-i18n="home.examSub">随机抽题，计时作答，交卷后逐题回顾</p>
     </div>
     <div class="grid grid-4">
       ${EXAMS.map(e => `<div class="exam-card${e.count === 35 ? ' featured' : ''}">
         <span class="exam-num">${e.count}</span>
         <h3>${esc(e.label)}</h3>
         <p>${esc(e.desc)}</p>
-        <span class="exam-meta">限时 ${Math.round(Math.max(300, e.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(e.count * 0.9)} 题</span>
-        <a class="btn ${e.count === 35 ? 'btn-primary' : 'btn-ghost'}" href="exam/${e.count}/">开始考试</a>
+        <span class="exam-meta" data-i18n="home.examMeta" data-t="${Math.round(Math.max(300, e.count * 54) / 60)}" data-n="${Math.ceil(e.count * 0.9)}">限时 ${Math.round(Math.max(300, e.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(e.count * 0.9)} 题</span>
+        <a class="btn ${e.count === 35 ? 'btn-primary' : 'btn-ghost'}" href="exam/${e.count}/" data-i18n="home.startThisExam">开始考试</a>
       </div>`).join('\n      ')}
     </div>
   </div>
@@ -339,14 +383,14 @@ function buildHome() {
   <div class="wrap">
     <div class="grid grid-2">
       <div class="card card-pad">
-        <h3>这个网站有什么</h3>
-        <p>覆盖新西兰小型汽车驾照理论考试的全部知识领域：核心规则、驾驶行为、停车标识、紧急事故、道路位置、交通路口、理论知识和道路标识。每道题都配有中文解析，讲清楚「为什么」。</p>
-        <p style="margin:0"><a href="study/">浏览全部 ${TOTAL_QUESTIONS} 道题 →</a></p>
+        <h3 data-i18n="home.whatHead">这个网站有什么</h3>
+        <p data-i18n="home.whatText">覆盖新西兰小型汽车驾照理论考试的全部知识领域：核心规则、驾驶行为、停车标识、紧急事故、道路位置、交通路口、理论知识和道路标识。每道题都配有中文解析，讲清楚「为什么」。</p>
+        <p style="margin:0"><a href="study/" data-i18n="home.whatMore" data-n="${TOTAL_QUESTIONS}">浏览全部 ${TOTAL_QUESTIONS} 道题 →</a></p>
       </div>
       <div class="card card-pad">
-        <h3>如何准备理论考试</h3>
-        <p>建议先按分类逐个学习，每题都读一遍解析；全部过完后再做「正式考试模拟（35 题）」。连续两次达到 90% 以上正确率，说明知识点已经掌握。</p>
-        <p style="margin:0"><a href="about/">了解本站与备考建议 →</a></p>
+        <h3 data-i18n="home.howHead">如何准备理论考试</h3>
+        <p data-i18n="home.howText">建议先按分类逐个学习，每题都读一遍解析；全部过完后再做「正式考试模拟（35 题）」。连续两次达到 90% 以上正确率，说明知识点已经掌握。</p>
+        <p style="margin:0"><a href="about/" data-i18n="home.howMore">了解本站与备考建议 →</a></p>
       </div>
     </div>
   </div>
@@ -378,23 +422,23 @@ function buildHome() {
 function buildStudyIndex() {
   const depth = 1;
   const body = `<div class="wrap">
-  ${breadcrumbs([{ label: '首页', href: '' }, { label: '理论学习' }], depth)}
+  ${breadcrumbs([{ label: '首页', href: '', i18n: 'nav.home' }, { label: '理论学习', i18n: 'nav.study' }], depth)}
   <section class="section" style="padding-top:14px">
-    <h1>理论学习</h1>
-    <p style="color:var(--ink-2);max-width:62ch">新西兰小型汽车驾照理论考试的知识点分为 8 个领域，共 ${TOTAL_QUESTIONS} 道试题。每个分类都可以逐题学习：选完答案立刻看到对错和解析，答错的题会在学习结束时汇总出来。</p>
+    <h1 data-i18n="study.title">理论学习</h1>
+    <p style="color:var(--ink-2);max-width:62ch" data-i18n="study.indexIntro" data-n="${TOTAL_QUESTIONS}">新西兰小型汽车驾照理论考试的知识点分为 8 个领域，共 ${TOTAL_QUESTIONS} 道试题。每个分类都可以逐题学习：选完答案立刻看到对错和解析，答错的题会在学习结束时汇总出来。</p>
     <div class="grid grid-3" style="margin-top:26px">
       ${categories.map(c => catCard(c, depth)).join('\n      ')}
     </div>
   </section>
 
   <section class="section">
-    <div class="section-head"><h2>全部试题</h2><p>按分类列出，点击可直接查看答案解析</p></div>
+    <div class="section-head"><h2 data-i18n="study.allQuestions">全部试题</h2><p data-i18n="study.allQuestionsSub">按分类列出，点击可直接查看答案解析</p></div>
     ${categories.map(c => `<div style="margin-bottom:26px">
-      <h3><a href="study/${c.id}/">${esc(c.name)}</a> <span style="font-weight:400;color:var(--ink-4);font-size:.85rem">${esc(c.nameEn)} · ${c.questions.length} 题</span></h3>
-      <ul class="q-list">
+      <h3><a href="study/${c.id}/" data-i18n-cat="name" data-cat="${c.id}">${esc(c.name)}</a> <span style="font-weight:400;color:var(--ink-4);font-size:.85rem">${esc(c.nameEn)} · <span data-i18n="common.questionsCount" data-n="${c.questions.length}">${c.questions.length} 题</span></span></h3>
+      <ul class="q-list" data-i18n-cat-questions="${c.id}">
         ${c.questions.map((q, i) => `<li><a href="study/question/${q.id}/">
           <span class="n">${i + 1}</span>
-          <span class="t">${esc(q.q)}</span>
+          <span class="t" data-i18n-q="${q.id}">${esc(q.q)}</span>
           ${q.image ? thumbSpan(q.image) : ''}
         </a></li>`).join('\n        ')}
       </ul>
@@ -404,11 +448,12 @@ function buildStudyIndex() {
 
   page('study/index.html', layout({
     title: '理论学习',
+    titleKey: 'study.title',
     description: `新西兰交规理论学习，${TOTAL_QUESTIONS} 道中文试题按核心规则、驾驶行为、停车标识、紧急事故、道路位置、交通路口、理论知识、道路标识 8 个分类整理，逐题配有解析。`,
     path: '/study/',
     depth,
     nav: 'study',
-    back: { href: '', label: '首页' },
+    back: { href: '', label: '首页', i18n: 'nav.home' },
     body
   }));
 }
@@ -418,24 +463,24 @@ function buildStudyIndex() {
 function buildCategoryPage(cat) {
   const depth = 2;
   const body = `<div class="wrap">
-  ${breadcrumbs([{ label: '首页', href: '' }, { label: '理论学习', href: 'study/' }, { label: cat.name }], depth)}
+  ${breadcrumbs([{ label: '首页', href: '', i18n: 'nav.home' }, { label: '理论学习', href: 'study/', i18n: 'nav.study' }, { label: cat.name, cat: cat.id }], depth)}
   <section class="section" style="padding-top:14px">
     <span class="cat-icon" style="background:${cat.color}1a;color:${cat.color};width:46px;height:46px;font-size:22px">${icon(cat.icon, 24)}</span>
-    <h1 style="margin-top:14px">${esc(cat.name)}</h1>
+    <h1 style="margin-top:14px" data-i18n-cat="name" data-cat="${cat.id}">${esc(cat.name)}</h1>
     <p style="color:var(--ink-3);font-size:.82rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-top:-6px">${esc(cat.nameEn)}</p>
-    <p style="color:var(--ink-2);max-width:62ch">${esc(cat.summary)}</p>
+    <p style="color:var(--ink-2);max-width:62ch" data-i18n-cat="summary" data-cat="${cat.id}">${esc(cat.summary)}</p>
     <div class="hero-actions" style="margin-top:18px">
-      <a class="btn btn-primary btn-lg" href="practice/">开始逐题学习（${cat.questions.length} 题）</a>
-      <a class="btn btn-ghost btn-lg" href="../../exam/35/">直接模拟考试</a>
+      <a class="btn btn-primary btn-lg" href="practice/" data-i18n="study.practiceWithCount" data-n="${cat.questions.length}">开始逐题学习（${cat.questions.length} 题）</a>
+      <a class="btn btn-ghost btn-lg" href="../../exam/35/" data-i18n="study.directExam">直接模拟考试</a>
     </div>
   </section>
 
   <section class="section" style="padding-top:0">
-    <div class="section-head"><h2>题目列表</h2><p>共 ${cat.questions.length} 题</p></div>
+    <div class="section-head"><h2 data-i18n="study.questionList">题目列表</h2><p data-i18n="common.questionsCount" data-n="${cat.questions.length}">共 ${cat.questions.length} 题</p></div>
     <ul class="q-list">
       ${cat.questions.map((q, i) => `<li><a href="../question/${q.id}/">
         <span class="n">${i + 1}</span>
-        <span class="t">${esc(q.q)}</span>
+        <span class="t" data-i18n-q="${q.id}">${esc(q.q)}</span>
         ${q.image ? thumbSpan(q.image) : ''}
       </a></li>`).join('\n      ')}
     </ul>
@@ -444,11 +489,13 @@ function buildCategoryPage(cat) {
 
   page(`study/${cat.id}/index.html`, layout({
     title: `${cat.name} · 理论学习`,
+    titleKey: 'catName',
+    titleKeyCat: cat.id,
     description: `新西兰交规「${cat.name}」（${cat.nameEn}）共 ${cat.questions.length} 道中文试题，逐题配有答案与解析。${cat.summary}`,
     path: `/study/${cat.id}/`,
     depth,
     nav: 'study',
-    back: { href: 'study/', label: '理论学习' },
+    back: { href: 'study/', label: '理论学习', i18n: 'nav.study' },
     body
   }));
 }
@@ -458,22 +505,23 @@ function buildCategoryPage(cat) {
 function buildPracticePage(cat) {
   const depth = 3;
   const body = `<div class="wrap">
-  ${breadcrumbs([{ label: '首页', href: '' }, { label: '理论学习', href: 'study/' }, { label: cat.name, href: `study/${cat.id}/` }, { label: '逐题学习' }], depth)}
+  ${breadcrumbs([{ label: '首页', href: '', i18n: 'nav.home' }, { label: '理论学习', href: 'study/', i18n: 'nav.study' }, { label: cat.name, href: `study/${cat.id}/`, cat: cat.id }, { label: '逐题学习', i18n: 'study.practiceShort' }], depth)}
   <section style="padding:18px 0 8px">
-    <h1 style="font-size:1.5rem;margin-bottom:4px">${esc(cat.name)} · 逐题学习</h1>
-    <p style="color:var(--ink-3);font-size:.9rem;margin:0">共 ${cat.questions.length} 题 · 选完答案立即判分并显示解析 · 可用键盘数字键 1-4 选择</p>
+    <h1 style="font-size:1.5rem;margin-bottom:4px"><span data-i18n-cat="name" data-cat="${cat.id}">${esc(cat.name)}</span> · <span data-i18n="study.practiceShort">逐题学习</span></h1>
+    <p style="color:var(--ink-3);font-size:.9rem;margin:0" data-i18n="study.practiceIntro" data-n="${cat.questions.length}">共 ${cat.questions.length} 题 · 选完答案立即判分并显示解析 · 可用键盘数字键 1-4 选择</p>
   </section>
   <div id="rc-app" data-mode="study" data-category="${cat.id}"></div>
 </div>
-<noscript><div class="wrap"><div class="notice">逐题学习需要启用 JavaScript。你也可以直接浏览<a href="../">题目列表</a>查看每道题的答案与解析。</div></div></noscript>`;
+<noscript><div class="wrap"><div class="notice" data-i18n="noscript.study">逐题学习需要启用 JavaScript。你也可以直接浏览<a href="../">题目列表</a>查看每道题的答案与解析。</div></div></noscript>`;
 
   page(`study/${cat.id}/practice/index.html`, layout({
     title: `${cat.name} · 逐题学习`,
+    titleKey: 'study.practiceShort',
     description: `新西兰交规「${cat.name}」逐题学习，${cat.questions.length} 道题即时判分并给出中文解析。`,
     path: `/study/${cat.id}/practice/`,
     depth,
     nav: 'study',
-    back: { href: `study/${cat.id}/`, label: cat.name },
+    back: { href: `study/${cat.id}/`, label: cat.name, cat: cat.id },
     focus: true,
     body
   }));
@@ -489,29 +537,29 @@ function buildQuestionPage(q, cat) {
   const LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
   const body = `<div class="wrap" style="max-width:820px">
-  ${breadcrumbs([{ label: '首页', href: '' }, { label: '理论学习', href: 'study/' }, { label: cat.name, href: `study/${cat.id}/` }, { label: `第 ${idx + 1} 题` }], depth)}
+  ${breadcrumbs([{ label: '首页', href: '', i18n: 'nav.home' }, { label: '理论学习', href: 'study/', i18n: 'nav.study' }, { label: cat.name, href: `study/${cat.id}/`, cat: cat.id }, { label: `第 ${idx + 1} 题`, i18n: 'exam.questionN', n: idx + 1 }], depth)}
   <section class="section" style="padding-top:14px">
     <div class="card q-card">
       <div class="q-head">
         <div class="q-index">${idx + 1}</div>
-        <p class="q-text">${esc(q.q)}</p>
+        <p class="q-text" data-i18n-q="${q.id}">${esc(q.q)}</p>
       </div>
       ${questionFigure(q, q.image && q.image.startsWith('sv-'))}
-      <ul class="opts">
-        ${q.options.map((o, i) => `<li><div class="opt${i === q.answer ? ' is-correct' : ' is-muted'}" style="cursor:default">
+      <ul class="opts" data-i18n-q-opts="${q.id}">
+        ${q.options.map((o, i) => `<li><div class="opt${i === q.answer ? ' is-correct' : ' is-muted'}" style="cursor:default" data-opt="${i}">
           <span class="opt-key">${LETTERS[i]}</span>
           <span class="opt-body">${esc(o)}</span>
         </div></li>`).join('\n        ')}
       </ul>
       <div class="answer-box">
-        <div class="label">正确答案：${LETTERS[q.answer]}. ${esc(q.options[q.answer])}</div>
+        <div class="label"><span data-i18n="common.correctAnswer">正确答案</span>：<b>${LETTERS[q.answer]}</b>. <span data-i18n-q-answer="${q.id}">${esc(q.options[q.answer])}</span></div>
       </div>
-      <h3>解析</h3>
-      <p style="color:var(--ink-2);margin:0">${esc(q.explanation)}</p>
+      <h3 data-i18n="common.explanation">解析</h3>
+      <p style="color:var(--ink-2);margin:0" data-i18n-q-expl="${q.id}">${esc(q.explanation)}</p>
       <div class="quiz-actions" style="margin-top:22px">
-        ${prev ? `<a class="btn btn-ghost" href="../${prev.id}/">← 上一题</a>` : ''}
-        <a class="btn btn-primary" href="../../${cat.id}/practice/">进入逐题学习</a>
-        ${next ? `<a class="btn btn-ghost" href="../${next.id}/">下一题 →</a>` : ''}
+        ${prev ? `<a class="btn btn-ghost" href="../${prev.id}/" data-i18n="study.prevQuestion">← 上一题</a>` : ''}
+        <a class="btn btn-primary" href="../../${cat.id}/practice/" data-i18n="study.enterPractice">进入逐题学习</a>
+        ${next ? `<a class="btn btn-ghost" href="../${next.id}/" data-i18n="study.nextQuestion">下一题 →</a>` : ''}
       </div>
     </div>
   </section>
@@ -553,32 +601,33 @@ function buildQuestionPage(q, cat) {
 function buildExamIndex() {
   const depth = 1;
   const body = `<div class="wrap">
-  ${breadcrumbs([{ label: '首页', href: '' }, { label: '模拟考试' }], depth)}
+  ${breadcrumbs([{ label: '首页', href: '', i18n: 'nav.home' }, { label: '模拟考试', i18n: 'nav.exam' }], depth)}
   <section class="section" style="padding-top:14px">
-    <h1>模拟考试</h1>
-    <p style="color:var(--ink-2);max-width:62ch">从全部 ${TOTAL_QUESTIONS} 道题中按分类比例随机抽题，作答过程中不显示对错，交卷后统一给出成绩与逐题回顾。计时会在时间耗尽时自动交卷。</p>
+    <h1 data-i18n="exam.title">模拟考试</h1>
+    <p style="color:var(--ink-2);max-width:62ch" data-i18n="exam.indexIntro" data-n="${TOTAL_QUESTIONS}">从全部 ${TOTAL_QUESTIONS} 道题中按分类比例随机抽题，作答过程中不显示对错，交卷后统一给出成绩与逐题回顾。计时会在时间耗尽时自动交卷。</p>
     <div class="grid grid-4" style="margin-top:26px">
       ${EXAMS.map(e => `<div class="exam-card${e.count === 35 ? ' featured' : ''}">
         <span class="exam-num">${e.count}</span>
         <h3>${esc(e.label)}</h3>
         <p>${esc(e.desc)}</p>
-        <p style="font-size:.82rem;color:var(--ink-4)">限时 ${Math.round(Math.max(300, e.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(e.count * 0.9)} 题</p>
-        <a class="btn ${e.count === 35 ? 'btn-primary' : 'btn-ghost'}" href="${e.count}/">开始考试</a>
+        <p style="font-size:.82rem;color:var(--ink-4)" data-i18n="home.examMeta" data-t="${Math.round(Math.max(300, e.count * 54) / 60)}" data-n="${Math.ceil(e.count * 0.9)}">限时 ${Math.round(Math.max(300, e.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(e.count * 0.9)} 题</p>
+        <a class="btn ${e.count === 35 ? 'btn-primary' : 'btn-ghost'}" href="${e.count}/" data-i18n="exam.start">开始考试</a>
       </div>`).join('\n      ')}
     </div>
     <div class="notice" style="margin-top:26px">
-      <b>关于评分：</b>新西兰驾照理论考试为 35 题、答对 32 题及格。本站所有模拟考试统一采用 90% 的正确率作为通过线，便于横向比较。
+      <b data-i18n="exam.aboutScoring">关于评分：</b><span data-i18n="exam.scoringNote">新西兰驾照理论考试为 35 题、答对 32 题及格。本站所有模拟考试统一采用 90% 的正确率作为通过线，便于横向比较。</span>
     </div>
   </section>
 </div>`;
 
   page('exam/index.html', layout({
     title: '模拟考试',
+    titleKey: 'exam.title',
     description: `新西兰驾照理论考试模拟，提供 10、20、35、50 题四种题量的随机抽题测试，含计时与交卷后逐题解析回顾。`,
     path: '/exam/',
     depth,
     nav: 'exam',
-    back: { href: '', label: '首页' },
+    back: { href: '', label: '首页', i18n: 'nav.home' },
     body
   }));
 }
@@ -586,14 +635,14 @@ function buildExamIndex() {
 function buildExamPage(exam) {
   const depth = 2;
   const body = `<div class="wrap">
-  ${breadcrumbs([{ label: '首页', href: '' }, { label: '模拟考试', href: 'exam/' }, { label: `${exam.count} 题` }], depth)}
+  ${breadcrumbs([{ label: '首页', href: '', i18n: 'nav.home' }, { label: '模拟考试', href: 'exam/', i18n: 'nav.exam' }, { label: `${exam.count} 题`, i18n: 'exam.countLabel', n: exam.count }], depth)}
   <section style="padding:18px 0 8px">
-    <h1 style="font-size:1.5rem;margin-bottom:4px">${esc(exam.label)}（${exam.count} 题）</h1>
-    <p style="color:var(--ink-3);font-size:.9rem;margin:0">限时 ${Math.round(Math.max(300, exam.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(exam.count * 0.9)} 题 · 交卷后可逐题回顾</p>
+    <h1 style="font-size:1.5rem;margin-bottom:4px">${esc(exam.label)}（<span data-i18n="exam.countLabel" data-n="${exam.count}">${exam.count} 题</span>）</h1>
+    <p style="color:var(--ink-3);font-size:.9rem;margin:0"><span data-i18n="exam.pageMeta" data-t="${Math.round(Math.max(300, exam.count * 54) / 60)}" data-n="${Math.ceil(exam.count * 0.9)}">限时 ${Math.round(Math.max(300, exam.count * 54) / 60)} 分钟 · 通过线 ${Math.ceil(exam.count * 0.9)} 题 · 交卷后可逐题回顾</span></p>
   </section>
   <div id="rc-app" data-mode="exam" data-count="${exam.count}"></div>
 </div>
-<noscript><div class="wrap"><div class="notice">模拟考试需要启用 JavaScript。你也可以直接<a href="../study/">浏览题库</a>进行学习。</div></div></noscript>`;
+<noscript><div class="wrap"><div class="notice" data-i18n="noscript.exam">模拟考试需要启用 JavaScript。你也可以直接<a href="../study/">浏览题库</a>进行学习。</div></div></noscript>`;
 
   page(`exam/${exam.count}/index.html`, layout({
     title: `${exam.label}（${exam.count} 题）`,
@@ -601,7 +650,7 @@ function buildExamPage(exam) {
     path: `/exam/${exam.count}/`,
     depth,
     nav: 'exam',
-    back: { href: 'exam/', label: '模拟考试' },
+    back: { href: 'exam/', label: '模拟考试', i18n: 'nav.exam' },
     focus: true,
     body
   }));
@@ -612,35 +661,36 @@ function buildExamPage(exam) {
 function buildAbout() {
   const depth = 1;
   const body = `<div class="wrap" style="max-width:760px">
-  ${breadcrumbs([{ label: '首页', href: '' }, { label: '关于本站' }], depth)}
+  ${breadcrumbs([{ label: '首页', href: '', i18n: 'nav.home' }, { label: '关于本站', i18n: 'nav.about' }], depth)}
   <section class="section" style="padding-top:14px">
-    <h1>关于本站</h1>
-    <p>${esc(SITE_NAME)} 是一个面向中文用户的新西兰驾照理论学习与模拟考试站点。全站只做两件事：<strong>理论学习</strong>和<strong>模拟考试</strong>。</p>
+    <h1 data-i18n="about.title">关于本站</h1>
+    <p data-i18n="about.intro" data-site="${esc(SITE_NAME)}">${esc(SITE_NAME)} 是一个面向中文用户的新西兰驾照理论学习与模拟考试站点。全站只做两件事：<strong>理论学习</strong>和<strong>模拟考试</strong>。</p>
 
-    <h3>内容说明</h3>
-    <p>本站全部 ${TOTAL_QUESTIONS} 道试题、选项与解析均为依据新西兰官方道路规则（New Zealand Road Code / Land Transport (Road User) Rule 2004）重新撰写的中文原创内容，用于帮助读者理解规则本身。站内所有道路标志与路口示意图为自绘 SVG 图形，不使用任何第三方图片素材。</p>
-    <p>本站不是新西兰交通局（NZTA / Waka Kotahi）的官方产品，题目与真实考试的表述不完全相同。真实考试请以官方发布的 Road Code 为准。</p>
+    <h3 data-i18n="about.hContent">内容说明</h3>
+    <p data-i18n="about.pContent" data-n="${TOTAL_QUESTIONS}">本站全部 ${TOTAL_QUESTIONS} 道试题、选项与解析均为依据新西兰官方道路规则（New Zealand Road Code / Land Transport (Road User) Rule 2004）重新撰写的中文原创内容，用于帮助读者理解规则本身。站内所有道路标志与路口示意图为自绘 SVG 图形，不使用任何第三方图片素材。</p>
+    <p data-i18n="about.pDisclaimer">本站不是新西兰交通局（NZTA / Waka Kotahi）的官方产品，题目与真实考试的表述不完全相同。真实考试请以官方发布的 Road Code 为准。</p>
 
-    <h3>没有广告</h3>
-    <p>本站不含任何广告位、第三方统计脚本、追踪像素或社交插件。页面加载的资源只有本站自己的样式表、脚本和图形。</p>
+    <h3 data-i18n="about.hNoAds">没有广告</h3>
+    <p data-i18n="about.pNoAds">本站不含任何广告位、第三方统计脚本、追踪像素或社交插件。页面加载的资源只有本站自己的样式表、脚本和图形。</p>
 
-    <h3>备考建议</h3>
-    <p>1. 按分类逐个学习，每道题都读一遍解析，重点理解「为什么」而不只是记住答案。<br>
-       2. 学完全部 ${categories.length} 个分类后，做一次「正式考试模拟（35 题）」。<br>
-       3. 连续两次达到 90% 以上正确率，说明知识点已经比较牢固。<br>
-       4. 考试当天提前到场，仔细读题——真实考试的题目措辞可能略有不同。</p>
+    <h3 data-i18n="about.hTips">备考建议</h3>
+    <p data-i18n="about.pTips" data-c="${categories.length}"><span>1. 按分类逐个学习，每道题都读一遍解析，重点理解「为什么」而不只是记住答案。</span><br>
+       <span>2. 学完全部 ${categories.length} 个分类后，做一次「正式考试模拟（35 题）」。</span><br>
+       <span>3. 连续两次达到 90% 以上正确率，说明知识点已经比较牢固。</span><br>
+       <span>4. 考试当天提前到场，仔细读题——真实考试的题目措辞可能略有不同。</span></p>
 
-    <h3>技术说明</h3>
-    <p>本站是纯静态站点，托管在 Cloudflare 边缘网络上，不收集任何用户数据，也不需要在服务端保存任何信息。你的答题记录只存在于当前浏览器页面中，刷新即清空。</p>
+    <h3 data-i18n="about.hTech">技术说明</h3>
+    <p data-i18n="about.pTech">本站是纯静态站点，托管在 Cloudflare 边缘网络上，不收集任何用户数据，也不需要在服务端保存任何信息。你的答题记录只存在于当前浏览器页面中，刷新即清空。</p>
   </section>
 </div>`;
 
   page('about/index.html', layout({
     title: '关于本站',
+    titleKey: 'about.title',
     description: `关于${SITE_NAME}：内容来源、无广告声明、新西兰驾照理论考试的备考建议。`,
     path: '/about/',
     depth,
-    back: { href: '', label: '首页' },
+    back: { href: '', label: '首页', i18n: 'nav.home' },
     body
   }));
 }
@@ -650,6 +700,23 @@ function buildAbout() {
 function buildAssets() {
   copyOut(join(DIST, 'assets', 'styles.css'), join(ROOT, 'src', 'styles.css'));
   copyOut(join(DIST, 'assets', 'app.js'), join(ROOT, 'src', 'app.js'));
+  copyOut(join(DIST, 'assets', 'i18n-runtime.js'), join(ROOT, 'src', 'i18n-runtime.js'));
+
+  // 多语言：UI 词典 + 各语言题目内容。单文件内联，切换语言不额外发请求。
+  const content = buildContent(categories, { en: EN, ja: JA, ko: KO });
+  writeOut(join(DIST, 'assets', 'i18n.js'),
+    '/* 多语言词典（构建产物，请勿手改） */\n'
+    + 'window.RC_I18N = ' + JSON.stringify({
+      LOCALES,
+      NATIVE: LOCALE_NATIVE,
+      SHORT: LOCALE_SHORT,
+      HTML_LANG: LOCALE_HTML_LANG,
+      OG: LOCALE_OG,
+      UI,
+      CATEGORY_NAME,
+      CATEGORY_SUMMARY,
+      CONTENT: content
+    }) + ';\n');
 
   // 图示库：key -> SVG 字符串（标志牌 + 路口场景 + 道路标线）
   const imgMap = {};
@@ -682,16 +749,17 @@ function buildMeta() {
   const body = `<div class="wrap" style="max-width:640px">
   <section class="section" style="text-align:center;padding:70px 0">
     <h1 style="font-size:3rem;margin-bottom:.1em">404</h1>
-    <p style="color:var(--ink-2)">没有找到这个页面。可能是链接过期，或者地址输入有误。</p>
+    <p style="color:var(--ink-2)" data-i18n="notFound.body">没有找到这个页面。可能是链接过期，或者地址输入有误。</p>
     <div class="hero-actions" style="justify-content:center">
-      <a class="btn btn-primary" href="/">返回首页</a>
-      <a class="btn btn-ghost" href="/study/">浏览题库</a>
+      <a class="btn btn-primary" href="/" data-i18n="common.backHome">返回首页</a>
+      <a class="btn btn-ghost" href="/study/" data-i18n="common.browse">浏览题库</a>
     </div>
   </section>
 </div>`;
 
   const html404 = layout({
     title: '页面不存在',
+    titleKey: 'notFound.title',
     description: '页面不存在。',
     path: '/404.html',
     depth,

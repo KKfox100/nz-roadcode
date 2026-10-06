@@ -85,23 +85,96 @@ H5 交互（`@media (max-width: 899px)`）：
 
 ---
 
+## 多语言（一键切换 · 5 种语言）
+
+顶栏（移动端在内容区顶部）有一个语言切换器：**简体中文 / 繁體中文 / English / 日本語 / 한국어**。
+点一下就换，不刷新、不跳页、不重新请求。
+
+| 语言 | 代码 | 内容来源 |
+|---|---|---|
+| 简体中文 | `zh-Hans` | `data/*.json`（canonical 内容源，手写） |
+| 繁體中文 | `zh-Hant` | 由简体**逐字转换**（`toHant` + `S2T_CHARS`） |
+| English | `en` | `src/i18n-content.mjs`，逐题对齐 NZTA 官方英文表述 |
+| 日本語 | `ja` | `src/i18n-ja.mjs` |
+| 한국어 | `ko` | `src/i18n-ko.mjs` |
+
+### ⚠️ 内容分层：UI 文案内置，题目内容按语言分模块
+
+- **UI 文案**（按钮、标题、页脚、aria-label…）5 语言全部内置在 `src/i18n.mjs` 的 `UI`，
+  每语言 **122 个键**，键集合必须完全一致（缺键会回退简体，但那是权宜，不是设计）
+- **题目内容**（题干 / 选项 / 解析）每种语言一个数据模块，键是 **question id**，
+  值是 `{ q, o: [选项], e: 解析 }`
+
+### ⚠️ answer 是数字索引 —— 各语言选项顺序必须与源完全一致
+
+`data/*.json` 的 `answer` 是**数字下标**，直接套用到各语言的选项数组上。
+所以翻译时**绝不能调整选项顺序**，否则答案指错题。
+`build.mjs` 构建期会跑 `assertComplete()` 门禁：逐语言比对「题数 = 源」「每题选项数 = 源」
+「无空选项」，任何一项不符就**构建失败**。
+
+这也是为什么新增语言时，宁可先机器翻译也不能重排选项。
+
+### 运行时切换怎么做到「只改 DOM、不重发请求」
+
+- 构建期把 5 语言的**全部内容**（UI + 261×5 题）打进单个 `assets/i18n.js`（约 690 KB）
+- `assets/i18n-runtime.js` 暴露 `window.RC_I18N`，`set(locale)` 时：
+  写 `localStorage['rc-locale']` → 改 `<html lang>` → 按 `data-i18n*` 属性重写静态文案 →
+  派发 `rc:locale` 事件
+- `app.js` 监听 `rc:locale` 重绘当前题目 / 考试结果（**作答进度与成绩保留**，
+  因为选项顺序不变、索引仍对得上）
+- 语言偏好存 `localStorage`，刷新后保持；没存过则按 `navigator.languages` 自动匹配
+  （`zh-TW/zh-HK/zh-MO/zh-Hant` → 繁体，`zh` → 简体，其余按主语言）
+
+### 静态页文案靠属性驱动，不是重新构建
+
+SSG 出来的是**简体中文**（canonical 视图）。静态页要靠这些属性才能被运行时改写：
+
+| 属性 | 用途 |
+|---|---|
+| `data-i18n="key"` | 文本内容（可配 `data-n` / `data-t` / `data-c` 占位符参数） |
+| `data-i18n-aria="key"` | `aria-label`（`nav.backTo` 的 `{label}` 取 `.back-target`） |
+| `data-i18n-title="key"` | `<title>`（配 `data-i18n-title-suffix`，分类页配 `data-cat`） |
+| `data-i18n-cat="name\|summary"` | 分类名 / 摘要（`data-cat` 可挂祖先，如 `.cat-card`） |
+| `data-i18n-q` / `-q-opts` / `-q-answer` / `-q-expl` | 单题页的题干 / 选项 / 正确答案 / 解析 |
+
+**别只加 `data-i18n` 忘了 `data-i18n-attr` 这类** —— 页面上看着切了，`aria-label` 还是中文。
+
+### SEO：一个 URL + hreflang 备用入口
+
+语言切换不换 URL（同页切换），所以 SEO 上给每种语言都写了 `hreflang` 备用链接
+（`build.mjs` 的 `hreflangLinks()`），外加 `x-default` 指向简体；
+`og:locale` = `zh_CN`，另有 4 个 `og:locale:alternate`。
+
+### ⚠️ 检测语言时别用「有没有汉字」当判据
+
+日文导航合法地含汉字（`学科学習`），用 `/[\u4e00-\u9fa5]/` 判「是否本地化」会把正确的日文判成没换。
+测试里改用该语言特有的字符集（假名 / 谚文）来判。
+
+---
+
 ## 技术结构
 
 ```
-data/*.json        题库（8 个文件，每个分类一个，共 261 题）
+data/*.json        题库（8 个文件，每个分类一个，共 261 题）—— 简体中文是 canonical 内容源
 data/topics.json   官方考纲：46 个知识点（从 NZTA road code 章节提取）
 data/topic-map.json  早期题目的「题号 → 知识点」映射
 src/images.mjs     自绘 SVG 图示库：30 个标志 + 4 个路口场景 + 14 个道路标线
                    （另导出 thumbnails：标线在列表里的加粗版）
 src/styles.css     样式表（手写，无框架；莫兰迪设计令牌 + H5 布局）
-src/app.js         前端交互：逐题学习 + 模拟考试
+src/app.js         前端交互：逐题学习 + 模拟考试（多语言感知）
+src/i18n.mjs       多语言词典与内容组装：UI（5 语言 × 122 键）、CATEGORY_NAME/SUMMARY、
+                   繁体转换表 S2T_CHARS、buildContent()（拼 5 语言题目内容 + assertComplete 门禁）
+src/i18n-content.mjs  English 题目内容（261 题，逐题对齐 NZTA 官方英文表述）
+src/i18n-ja.mjs       日本語 题目内容（261 题）
+src/i18n-ko.mjs       한국어 题目内容（261 题）
+src/i18n-runtime.js   运行时语言层（ⅡFE，暴露 window.RC_I18N）：检测/持久化/文案替换/重绘
 tools/check-coverage.cjs  覆盖度体检（构建时自动跑，也可单独执行）
 tools/figure-sheet.mjs    生成图示对照页到 tests/shots/（场景图叠车道参考线 / 标线完整+加粗）
                           ⚠️ 故意不写进 dist/ —— 对照页会内联参考站的图，见「开发期对照页」一节
 tools/shot-live.cjs       抓页面截图（--questions / --sheet / --scenes / --kannz）
 build.mjs          构建脚本：把题库渲染成静态站点到 dist/
 dist/              构建产物（= Cloudflare 静态资源目录，已 gitignore）
-tests/e2e.cjs      端到端测试（真实 Chrome + CDP，139 项断言）
+tests/e2e.cjs      端到端测试（真实 Chrome + CDP，179 项断言）
 tests/live-security.cjs  线上安全检查（源码/数据文件不可访问）
 wrangler.jsonc     Cloudflare Workers 部署配置
 research/          研究脚本与原始素材（不部署，仅供核对）
@@ -328,7 +401,10 @@ npm test
 404 状态码 / 静态资源 MIME / **图示渲染（每个带 `image` 的题目都要真的画出
 SVG、图示库数量与构建产物一致）** / **移动端 H5（底部标签栏、专注模式、
 固定操作栏、44px 触摸目标、无横向溢出）** / **莫兰迪配色（分类色饱和度上限、
-theme-color）** / console 错误。
+theme-color）** / **多语言（`[12b]`：5 语言切换器存在、切英文/繁/日/韩后
+`<html lang>` 与文案都变、偏好写入 localStorage 且刷新后保持、单题页与逐题学习
+的题干/选项/解析本地化、考试页文案本地化、作答进度保留、各语言无横向溢出）** /
+console 错误。
 
 ⚠️ 测试里**不要写死题目数量**。断言统一从 `data/*.json` 现算
 （`TOTAL_QUESTIONS` / `loadCat('sign').questions.length`），

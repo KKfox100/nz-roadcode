@@ -746,6 +746,175 @@ async function waitStyled(b) {
     check('桌面端隐藏返回按钮（改用面包屑）', dz.backLinkDisplay === 'none', dz.backLinkDisplay);
     check('theme-color 与背景一致', dz.themeColor === dz.bg, dz.themeColor + ' vs ' + dz.bg);
 
+    /* ---------------- 12b. 多语言一键切换 ---------------- */
+    console.log('\n[12b] 多语言切换');
+    await b.goto(BASE + '/');
+    await waitStyled(b);
+
+    // 语言切换器：5 个按钮，中文简体默认选中
+    const ls = await b.eval(`(() => {
+      const btns = Array.from(document.querySelectorAll('.lang-switch [data-lang]'));
+      return {
+        n: btns.length,
+        langs: btns.map(x => x.getAttribute('data-lang')),
+        active: btns.filter(x => x.classList.contains('is-active')).map(x => x.getAttribute('data-lang')),
+        htmlLang: document.documentElement.getAttribute('lang'),
+        visible: btns.length ? getComputedStyle(btns[0]).display !== 'none' : false
+      };
+    })()`);
+    check('语言切换器有 5 个语言', ls.n === 5, JSON.stringify(ls.langs));
+    check('包含 zh-Hans/zh-Hant/en/ja/ko',
+      ['zh-Hans', 'zh-Hant', 'en', 'ja', 'ko'].every(l => ls.langs.indexOf(l) !== -1), JSON.stringify(ls.langs));
+    check('默认选中简体中文', ls.active.length === 1 && ls.active[0] === 'zh-Hans', JSON.stringify(ls.active));
+    check('切换器可见', ls.visible);
+    check('初始 <html lang> 为 zh-Hans', ls.htmlLang === 'zh-Hans', ls.htmlLang);
+
+    // 切到英文：静态文案 + <html lang> + localStorage
+    const en = await b.eval(`(() => {
+      document.querySelector('.lang-switch [data-lang="en"]').click();
+      return new Promise(r => setTimeout(() => r({
+        htmlLang: document.documentElement.getAttribute('lang'),
+        h1: (document.querySelector('h1') || {}).textContent || '',
+        navStudy: (document.querySelector('.site-nav [data-i18n="nav.study"]') || {}).textContent || '',
+        lede: (document.querySelector('.hero-lede') || {}).textContent || '',
+        catName: (document.querySelector('.cat-card h3') || {}).textContent || '',
+        catMeta: (document.querySelector('.cat-card .cat-meta') || {}).textContent || '',
+        examMeta: (document.querySelector('.exam-card .exam-meta') || {}).textContent || '',
+        figCap: (document.querySelector('.hero-art .fig-cap') || {}).textContent || '',
+        active: Array.from(document.querySelectorAll('.lang-switch .is-active')).map(x => x.getAttribute('data-lang')),
+        stored: localStorage.getItem('rc-locale'),
+        title: document.title
+      }), 260));
+    })()`);
+    check('切英文后 <html lang>=en', en.htmlLang === 'en', en.htmlLang);
+    check('切英文后 h1 变英文', /New Zealand/i.test(en.h1), en.h1);
+    check('切英文后导航变英文', en.navStudy === 'Theory study', en.navStudy);
+    check('切英文后首页导语变英文', /study categories|practice questions/i.test(en.lede), en.lede.slice(0, 60));
+    check('切英文后分类名变英文', en.catName.length > 0 && !/[\u4e00-\u9fa5]/.test(en.catName), en.catName);
+    check('切英文后分类题数文案变英文', /questions/.test(en.catMeta), en.catMeta);
+    check('切英文后考试卡片文案变英文', /min|pass mark/.test(en.examMeta), en.examMeta);
+    check('切英文后首页场景图注变英文',
+      /Crossroads|blue car/i.test(en.figCap) && !/[\u4e00-\u9fa5]/.test(en.figCap), en.figCap);
+    check('切英文后切换器高亮切到 en', en.active.length === 1 && en.active[0] === 'en', JSON.stringify(en.active));
+    check('语言偏好写入 localStorage', en.stored === 'en', String(en.stored));
+    await b.shot('tests/shots/11-lang-en.png');
+
+    // 切到繁体：逐字转换生效
+    const hant = await b.eval(`(() => {
+      document.querySelector('.lang-switch [data-lang="zh-Hant"]').click();
+      return new Promise(r => setTimeout(() => r({
+        h1: (document.querySelector('h1') || {}).textContent || '',
+        navStudy: (document.querySelector('.site-nav [data-i18n="nav.study"]') || {}).textContent || '',
+        htmlLang: document.documentElement.getAttribute('lang')
+      }), 260));
+    })()`);
+    check('切繁体后 <html lang>=zh-Hant', hant.htmlLang === 'zh-Hant', hant.htmlLang);
+    check('切繁体后导航为「理論學習」', hant.navStudy === '理論學習', hant.navStudy);
+    check('切繁体后出现繁体字（學/紐/蘭）', /[學紐蘭規]/.test(hant.h1), hant.h1);
+
+    // 切日文 / 韩文
+    // 注意：日文导航合法地含有汉字（学科学習），所以不能用「无汉字」当判据，
+    // 只能校验它确实变成了该语言的文案（与简体中文不同）。
+    for (const [loc, expect] of [['ja', /[ぁ-んァ-ヶ]/], ['ko', /[가-힣]/]]) {
+      const r = await b.eval(`(() => {
+        document.querySelector('.lang-switch [data-lang="${loc}"]').click();
+        return new Promise(res => setTimeout(() => res({
+          h1: (document.querySelector('h1') || {}).textContent || '',
+          navStudy: (document.querySelector('.site-nav [data-i18n="nav.study"]') || {}).textContent || '',
+          htmlLang: document.documentElement.getAttribute('lang')
+        }), 260));
+      })()`);
+      check(`切 ${loc} 后 <html lang> 正确`, r.htmlLang === loc, r.htmlLang);
+      check(`切 ${loc} 后文案是对应语言`, expect.test(r.h1), r.h1);
+      check(`切 ${loc} 后导航已本地化`,
+        r.navStudy.length > 0 && (expect.test(r.navStudy) || r.navStudy !== '理论学习'), r.navStudy);
+    }
+    await b.shot('tests/shots/11-lang-ko.png');
+
+    // 刷新后偏好保持
+    await b.goto(BASE + '/');
+    await waitStyled(b);
+    const persist = await b.eval(`(() => ({
+      htmlLang: document.documentElement.getAttribute('lang'),
+      h1: (document.querySelector('h1') || {}).textContent || ''
+    }))()`);
+    check('刷新后仍是上次选的语言', persist.htmlLang === 'ko', persist.htmlLang);
+    check('刷新后文案仍为韩文', /[가-힣]/.test(persist.h1), persist.h1);
+
+    // 题目内容切换：单题页题干/选项/解析随语言变化
+    await b.eval(`localStorage.setItem('rc-locale','zh-Hans')`);
+    await b.goto(BASE + '/study/question/core-01/');
+    await waitStyled(b);
+    const qZh = await b.eval(`(() => ({
+      q: (document.querySelector('.q-text') || {}).textContent || '',
+      opt: (document.querySelector('.opt-body') || {}).textContent || '',
+      expl: (document.querySelector('.q-card > p:last-of-type') || {}).textContent || ''
+    }))()`);
+    const qEn = await b.eval(`(() => {
+      document.querySelector('.lang-switch [data-lang="en"]').click();
+      return new Promise(r => setTimeout(() => r({
+        q: (document.querySelector('.q-text') || {}).textContent || '',
+        opt: (document.querySelector('.opt-body') || {}).textContent || '',
+        ans: (document.querySelector('[data-i18n-q-answer]') || {}).textContent || '',
+        expl: (document.querySelector('[data-i18n-q-expl]') || {}).textContent || ''
+      }), 300));
+    })()`);
+    check('单题页题干切英文后变化', qEn.q !== qZh.q && qEn.q.length > 0, qEn.q.slice(0, 50));
+    check('单题页选项切英文后变化', qEn.opt !== qZh.opt && qEn.opt.length > 0, qEn.opt.slice(0, 40));
+    check('单题页题干无中文', !/[\u4e00-\u9fa5]/.test(qEn.q), qEn.q.slice(0, 60));
+    check('单题页解析切英文后无中文', qEn.expl.length > 0 && !/[\u4e00-\u9fa5]/.test(qEn.expl), qEn.expl.slice(0, 50));
+    check('单题页正确答案文本已本地化', qEn.ans.length > 0 && !/[\u4e00-\u9fa5]/.test(qEn.ans), qEn.ans.slice(0, 40));
+
+    // 逐题学习交互：切换语言后选项/解析本地化且作答状态保留
+    await b.eval(`localStorage.setItem('rc-locale','zh-Hans')`);
+    await b.goto(BASE + '/study/core/practice/');
+    await waitStyled(b);
+    const stEn = await b.eval(`(() => {
+      document.querySelectorAll('.opt')[0].click();
+      document.querySelector('.lang-switch [data-lang="en"]').click();
+      return new Promise(r => setTimeout(() => r({
+        q: (document.querySelector('.q-text') || {}).textContent || '',
+        opt: (document.querySelector('.opt-body') || {}).textContent || '',
+        revealed: !!document.querySelector('.opt.is-correct'),
+        count: (document.querySelector('.quiz-count') || {}).textContent || ''
+      }), 300));
+    })()`);
+    check('逐题学习切英文后题干本地化', !/[\u4e00-\u9fa5]/.test(stEn.q) && stEn.q.length > 0, stEn.q.slice(0, 50));
+    check('逐题学习切英文后选项本地化', stEn.opt.length > 0 && !/[\u4e00-\u9fa5]/.test(stEn.opt), stEn.opt.slice(0, 40));
+    check('逐题学习切英文后作答状态保留', stEn.revealed);
+    check('逐题学习进度文案已本地化', /Question|of/i.test(stEn.count), stEn.count);
+
+    // 考试模式切语言：结果页可重绘
+    await b.eval(`localStorage.setItem('rc-locale','en')`);
+    await b.goto(BASE + '/exam/10/');
+    await waitStyled(b);
+    const exEn = await b.eval(`(() => ({
+      count: (document.querySelector('.quiz-count') || {}).textContent || '',
+      timer: (document.querySelector('.quiz-timer') || {}).textContent || '',
+      submit: Array.from(document.querySelectorAll('.btn')).map(x => x.textContent).join('|')
+    }))()`);
+    check('考试页题号文案本地化', /Question 1 of 10/.test(exEn.count), exEn.count);
+    check('考试页计时文案本地化', /Time left/.test(exEn.timer), exEn.timer);
+    check('考试页交卷按钮本地化', /Submit/.test(exEn.submit), exEn.submit);
+
+    // 恢复默认，避免影响后续用例
+    await b.eval(`localStorage.setItem('rc-locale','zh-Hans')`);
+    await b.goto(BASE + '/');
+    await waitStyled(b);
+
+    // 切换语言不引入横向溢出
+    const langOverflow = await b.eval(`(async () => {
+      const out = [];
+      for (const l of ['zh-Hant','en','ja','ko','zh-Hans']) {
+        document.querySelector('.lang-switch [data-lang="' + l + '"]').click();
+        await new Promise(r => setTimeout(r, 160));
+        const de = document.documentElement;
+        out.push({ l, over: de.scrollWidth - de.clientWidth });
+      }
+      return out;
+    })()`);
+    check('各语言下均无横向溢出', langOverflow.every(x => x.over <= 1), JSON.stringify(langOverflow));
+
     /* ---------------- 13. console 错误 ---------------- */
     console.log('\n[13] 控制台错误');
     const errs = b.consoleErrors().filter(e => !/favicon/i.test(e));

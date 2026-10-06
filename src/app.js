@@ -1,6 +1,11 @@
 /* ==========================================================================
    NZ Road Code 中文版 —— 前端交互
-   依赖（按顺序加载）：assets/images.js -> assets/questions.js -> 本文件
+   依赖（按顺序加载）：
+     assets/i18n.js        多语言词典（构建产物）
+     assets/i18n-runtime.js 语言切换与文案层
+     assets/images.js      图示库
+     assets/questions.js   题库
+     本文件
    ========================================================================== */
 
 (function () {
@@ -9,6 +14,38 @@
   var BANK = window.RC_BANK || { categories: [] };
   var IMAGES = window.RC_IMAGES || {};
   var CAPTIONS = window.RC_CAPTIONS || {};
+
+  /* ---------- 多语言 ---------- */
+
+  var I18N = window.RC_I18N;
+  /** 取 UI 文案。i18n-runtime 没加载时退化为键名，不至于把界面搞崩。 */
+  function t(key, vars) { return I18N ? I18N.t(key, vars) : key; }
+  /** 取当前语言下某题的内容（题干/选项/解析）。 */
+  function qtext(qid) { return I18N ? I18N.q(qid) : null; }
+  function catName(id) { return I18N ? I18N.catName(id) : id; }
+  function catSummary(id) { return I18N ? I18N.catSummary(id) : ''; }
+  /** 当前语言的分类对象（名字/摘要随语言变化，题目内容是本地化的）。 */
+  function localizedCat(cat) {
+    if (!I18N) return cat;
+    return Object.assign({}, cat, {
+      name: catName(cat.id),
+      summary: catSummary(cat.id),
+      questions: cat.questions.map(function (q) { return localQuestion(q, cat.id); })
+    });
+  }
+  /** 把一道源题翻译成当前语言下的题（选项顺序保持与源一致 —— answer 索引复用）。 */
+  function localQuestion(q, catId) {
+    var c = qtext(q.id);
+    if (!c) return q;
+    return Object.assign({}, q, {
+      q: c.q,
+      options: c.options,
+      explanation: c.explanation,
+      category: catId != null ? catId : q.category
+    });
+  }
+  /** 题目对象（ALL 里的条目）本地化，供考试/练习等逐题渲染用。 */
+  function lq(q) { return localQuestion(q, q.category); }
 
   var ALL = [];
   BANK.categories.forEach(function (cat) {
@@ -81,7 +118,10 @@
     if (!q.image || !IMAGES[q.image]) return null;
     var box = el('div', 'q-figure' + (wide ? ' wide' : ''));
     box.innerHTML = IMAGES[q.image];
-    if (CAPTIONS[q.image]) box.appendChild(el('p', 'fig-cap', CAPTIONS[q.image]));
+    // 场景图注按当前语言取（cap.<key>）；没有对应语言键时回退源注
+    var cap = t('cap.' + q.image);
+    if (cap === 'cap.' + q.image) cap = CAPTIONS[q.image];
+    if (cap) box.appendChild(el('p', 'fig-cap', cap));
     return box;
   }
 
@@ -99,12 +139,17 @@
   /* ---------- 理论学习模式 ---------- */
 
   function Study(root, categoryId) {
-    var cat = CAT_BY_ID[categoryId];
-    if (!cat) return;
-    var list = cat.questions.slice();
+    var cat0 = CAT_BY_ID[categoryId];
+    if (!cat0) return;
+    var list = [];
     var i = 0;
     var picked = {};       // index -> 选中的选项
     var revealed = {};     // index -> true
+
+    /** 切换语言后重取题目内容，但保留作答进度（选项顺序不变，索引仍对得上）。 */
+    function reload() {
+      list = cat0.questions.map(function (q) { return localQuestion(q, cat0.id); });
+    }
 
     function render() {
       var q = list[i];
@@ -115,9 +160,9 @@
       /* 进度条 */
       var bar = el('div', 'quiz-bar');
       var row1 = el('div', 'quiz-bar-row');
-      row1.appendChild(backBtn(rootPrefix() + 'study/' + cat.id + '/', cat.name));
-      row1.appendChild(el('span', 'quiz-count', '第 ' + (i + 1) + ' 题 / 共 ' + list.length + ' 题'));
-      row1.appendChild(el('span', 'quiz-timer', cat.name));
+      row1.appendChild(backBtn(rootPrefix() + 'study/' + cat0.id + '/', catName(cat0.id)));
+      row1.appendChild(el('span', 'quiz-count', t('study.qCount', { i: i + 1, n: list.length })));
+      row1.appendChild(el('span', 'quiz-timer', catName(cat0.id)));
       bar.appendChild(row1);
       var row2 = el('div', 'quiz-bar-row');
       var prog = el('div', 'progress');
@@ -165,14 +210,14 @@
         var ok = picked[i] === q.answer;
         var fb = el('div', 'feedback ' + (ok ? 'ok' : 'bad'));
         var ft = el('div', 'feedback-title');
-        ft.textContent = ok ? '✓ 回答正确' : '✕ 回答错误';
+        ft.textContent = ok ? t('result.correct') : t('result.wrong');
         fb.appendChild(ft);
         if (!ok) {
           var p = el('p');
-          p.innerHTML = '正确答案是 <b>' + LETTERS[q.answer] + '. ' + esc(q.options[q.answer]) + '</b>';
+          p.innerHTML = esc(t('result.correctAnswerIs')) + ' <b>' + LETTERS[q.answer] + '. ' + esc(q.options[q.answer]) + '</b>';
           fb.appendChild(p);
         }
-        var lab = el('div', 'expl-label', '解析');
+        var lab = el('div', 'expl-label', t('common.explanation'));
         fb.appendChild(lab);
         var pe = el('p', '', q.explanation);
         fb.appendChild(pe);
@@ -181,14 +226,14 @@
 
       /* 操作区 */
       var actions = el('div', 'quiz-actions');
-      var prev = el('button', 'btn btn-ghost', '上一题');
+      var prev = el('button', 'btn btn-ghost', t('common.prev'));
       prev.type = 'button';
       prev.disabled = i === 0;
       prev.addEventListener('click', function () { i--; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
       actions.appendChild(prev);
 
       if (!answered) {
-        var skip = el('button', 'btn btn-quiet', '看答案');
+        var skip = el('button', 'btn btn-quiet', t('common.seeAnswer'));
         skip.type = 'button';
         skip.addEventListener('click', function () {
           picked[i] = -1; revealed[i] = true; render();
@@ -198,7 +243,7 @@
 
       actions.appendChild(el('div', 'spacer'));
 
-      var next = el('button', 'btn btn-primary', i === list.length - 1 ? '完成学习' : '下一题');
+      var next = el('button', 'btn btn-primary', i === list.length - 1 ? t('common.finishStudy') : t('common.next'));
       next.type = 'button';
       next.addEventListener('click', function () {
         if (i === list.length - 1) { finish(); }
@@ -235,11 +280,12 @@
       var pct = done ? Math.round(correct / done * 100) : 0;
       var score = el('div', 'result-score ' + (pct >= 90 ? 'pass' : 'fail'), pct + '%');
       card.appendChild(score);
-      card.appendChild(el('div', 'result-verdict', cat.name + ' 学习完成'));
-      card.appendChild(el('div', 'result-sub', '本次共作答 ' + done + ' 题，答对 ' + correct + ' 题，答错 ' + wrongIdx.length + ' 题'));
+      card.appendChild(el('div', 'result-verdict', t('result.studyDone', { cat: catName(cat0.id) })));
+      card.appendChild(el('div', 'result-sub', t('result.studySub', { done: done, correct: correct, wrong: wrongIdx.length })));
 
       var grid = el('div', 'result-grid');
-      [['已作答', done + ' / ' + list.length], ['答对', String(correct)], ['答错', String(wrongIdx.length)], ['正确率', pct + '%']]
+      [[t('result.answered'), done + ' / ' + list.length], [t('result.correctN'), String(correct)],
+       [t('result.wrongN'), String(wrongIdx.length)], [t('result.rate'), pct + '%']]
         .forEach(function (pair) {
           var s = el('div', 'result-stat');
           s.appendChild(el('b', '', pair[1]));
@@ -250,10 +296,10 @@
 
       var acts = el('div', 'quiz-actions');
       acts.style.justifyContent = 'center';
-      var again = el('a', 'btn btn-primary', '重新学习本分类');
+      var again = el('a', 'btn btn-primary', t('result.retryCat'));
       again.href = location.pathname;
       acts.appendChild(again);
-      var home = el('a', 'btn btn-ghost', '返回首页');
+      var home = el('a', 'btn btn-ghost', t('common.backHome'));
       home.href = '../../';
       acts.appendChild(home);
       card.appendChild(acts);
@@ -262,21 +308,21 @@
       if (wrongIdx.length) {
         var wc = el('div', 'card card-pad');
         wc.style.marginTop = '18px';
-        wc.appendChild(el('h3', '', '错题回顾（' + wrongIdx.length + ' 题）'));
+        wc.appendChild(el('h3', '', t('result.wrongReview', { n: wrongIdx.length })));
         wrongIdx.forEach(function (idx) {
           var q = list[idx];
           var box = el('div');
           box.style.padding = '14px 0';
           box.style.borderTop = '1px solid var(--line)';
-          var t = el('p');
-          t.style.fontWeight = '700';
-          t.style.marginBottom = '6px';
-          t.textContent = (idx + 1) + '. ' + q.q;
-          box.appendChild(t);
+          var tp = el('p');
+          tp.style.fontWeight = '700';
+          tp.style.marginBottom = '6px';
+          tp.textContent = (idx + 1) + '. ' + q.q;
+          box.appendChild(tp);
           var a = el('p');
           a.style.margin = '0 0 6px';
           a.style.fontSize = '.92rem';
-          a.innerHTML = '正确答案：<b>' + LETTERS[q.answer] + '. ' + esc(q.options[q.answer]) + '</b>';
+          a.innerHTML = esc(t('common.correctAnswer')) + '：<b>' + LETTERS[q.answer] + '. ' + esc(q.options[q.answer]) + '</b>';
           box.appendChild(a);
           var e = el('p');
           e.style.margin = '0';
@@ -284,7 +330,7 @@
           e.style.color = 'var(--ink-3)';
           e.textContent = q.explanation;
           box.appendChild(e);
-          var link = el('a', 'btn btn-sm btn-quiet', '查看该题');
+          var link = el('a', 'btn btn-sm btn-quiet', t('common.viewQuestion'));
           link.href = '../../question/' + q.id + '/';
           link.style.marginTop = '8px';
           box.appendChild(link);
@@ -297,7 +343,9 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    reload();
     render();
+    document.addEventListener('rc:locale', function () { reload(); render(); });
   }
 
   /* ---------- 模拟考试模式 ---------- */
@@ -342,7 +390,7 @@
         left--;
         var node = $('.quiz-timer', root);
         if (node) {
-          node.textContent = '剩余 ' + fmtTime(Math.max(0, left));
+          node.textContent = t('exam.remaining', { t: fmtTime(Math.max(0, left)) });
           node.classList.toggle('is-low', left <= 60);
         }
         if (left <= 0) { clearInterval(timer); timer = null; submit(true); }
@@ -357,11 +405,11 @@
 
       var bar = el('div', 'quiz-bar');
       var row1 = el('div', 'quiz-bar-row');
-      row1.appendChild(backBtn(rootPrefix() + 'exam/', '模拟考试'));
-      row1.appendChild(el('span', 'quiz-count', '第 ' + (i + 1) + ' 题 / 共 ' + list.length + ' 题'));
+      row1.appendChild(backBtn(rootPrefix() + 'exam/', t('exam.title')));
+      row1.appendChild(el('span', 'quiz-count', t('study.qCount', { i: i + 1, n: list.length })));
       var answeredN = answers.filter(function (a) { return a !== null; }).length;
-      row1.appendChild(el('span', 'pill', '已答 ' + answeredN + ' 题'));
-      row1.appendChild(el('span', 'quiz-timer', '剩余 ' + fmtTime(Math.max(0, left))));
+      row1.appendChild(el('span', 'pill', t('exam.answered', { n: answeredN })));
+      row1.appendChild(el('span', 'quiz-timer', t('exam.remaining', { t: fmtTime(Math.max(0, left)) })));
       bar.appendChild(row1);
 
       var row2 = el('div', 'quiz-bar-row');
@@ -374,12 +422,12 @@
 
       /* 题号导航：移动端横向滚动，当前题自动滚到可视区中间 */
       var nav = el('div', 'quiz-nav');
-      nav.setAttribute('aria-label', '题号导航');
+      nav.setAttribute('aria-label', t('exam.nav'));
       list.forEach(function (_, idx) {
         var cls = idx === i ? 'is-current' : (answers[idx] !== null ? 'is-done' : '');
         var b = el('button', cls, String(idx + 1));
         b.type = 'button';
-        b.setAttribute('aria-label', '第 ' + (idx + 1) + ' 题');
+        b.setAttribute('aria-label', t('exam.questionN', { n: idx + 1 }));
         b.addEventListener('click', function () { i = idx; render(); });
         nav.appendChild(b);
       });
@@ -395,7 +443,7 @@
       var head = el('div', 'q-head');
       head.appendChild(el('div', 'q-index', String(i + 1)));
       var qt = el('p', 'q-text');
-      qt.textContent = q.q;
+      qt.textContent = lq(q).q;
       head.appendChild(qt);
       card.appendChild(head);
 
@@ -403,7 +451,7 @@
       if (fig) card.appendChild(fig);
 
       var opts = el('ul', 'opts');
-      q.options.forEach(function (text, idx) {
+      lq(q).options.forEach(function (text, idx) {
         var li = el('li');
         var btn = el('button', 'opt' + (answers[i] === idx ? ' is-selected' : ''));
         btn.type = 'button';
@@ -416,23 +464,23 @@
       card.appendChild(opts);
 
       var actions = el('div', 'quiz-actions');
-      var prev = el('button', 'btn btn-ghost', '上一题');
+      var prev = el('button', 'btn btn-ghost', t('common.prev'));
       prev.type = 'button';
       prev.disabled = i === 0;
       prev.addEventListener('click', function () { i--; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
       actions.appendChild(prev);
       actions.appendChild(el('div', 'spacer'));
       if (i < list.length - 1) {
-        var next = el('button', 'btn btn-primary', '下一题');
+        var next = el('button', 'btn btn-primary', t('common.next'));
         next.type = 'button';
         next.addEventListener('click', function () { i++; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
         actions.appendChild(next);
       }
-      var sub = el('button', 'btn btn-primary', '交卷');
+      var sub = el('button', 'btn btn-primary', t('exam.submit'));
       sub.type = 'button';
       sub.addEventListener('click', function () {
         var un = answers.filter(function (a) { return a === null; }).length;
-        if (un > 0 && !confirm('还有 ' + un + ' 题未作答，确定要交卷吗？')) return;
+        if (un > 0 && !confirm(t('exam.confirmSubmit', { n: un }))) return;
         submit(false);
       });
       actions.appendChild(sub);
@@ -445,26 +493,35 @@
       if (submitted) return;
       submitted = true;
       if (timer) { clearInterval(timer); timer = null; }
-
+      submit.auto = !!auto;
       var correct = 0;
       list.forEach(function (q, idx) { if (answers[idx] === q.answer) correct++; });
+      submit.correct = correct;
+      submit.used = Math.round((Date.now() - startedAt) / 1000);
+      paintResult();
+    }
+
+    /* 结果页：可重绘（切换语言时重新生成文案，不改变成绩） */
+    function paintResult() {
+      var auto = submit.auto;
+      var correct = submit.correct;
+      var used = submit.used;
       var n = list.length;
       var need = Math.ceil(n * 0.9);
       var pass = correct >= need;
-      var used = Math.round((Date.now() - startedAt) / 1000);
 
       root.innerHTML = '';
       var shell = el('div', 'quiz-shell');
 
       var card = el('div', 'card result-hero');
       card.appendChild(el('div', 'result-score ' + (pass ? 'pass' : 'fail'), correct + ' / ' + n));
-      card.appendChild(el('div', 'result-verdict', pass ? '通过 ✓' : '未通过'));
+      card.appendChild(el('div', 'result-verdict', pass ? t('exam.passed') : t('exam.failed')));
       card.appendChild(el('div', 'result-sub',
-        (auto ? '时间到，已自动交卷。' : '') +
-        '本次正确率 ' + Math.round(correct / n * 100) + '%，通过线为答对 ' + need + ' 题（90%）。'));
+        (auto ? t('exam.timeUp') : '') +
+        t('exam.resultSub', { pct: Math.round(correct / n * 100), need: need })));
 
       var grid = el('div', 'result-grid');
-      [['答对', String(correct)], ['答错', String(n - correct)], ['用时', fmtTime(used)], ['正确率', Math.round(correct / n * 100) + '%']]
+      [[t('exam.statCorrect'), String(correct)], [t('exam.statWrong'), String(n - correct)], [t('exam.statUsed'), fmtTime(used)], [t('exam.statRate'), Math.round(correct / n * 100) + '%']]
         .forEach(function (pair) {
           var s = el('div', 'result-stat');
           s.appendChild(el('b', '', pair[1]));
@@ -475,10 +532,10 @@
 
       var acts = el('div', 'quiz-actions');
       acts.style.justifyContent = 'center';
-      var again = el('a', 'btn btn-primary', '再考一次');
+      var again = el('a', 'btn btn-primary', t('exam.retake'));
       again.href = location.pathname;
       acts.appendChild(again);
-      var home = el('a', 'btn btn-ghost', '返回首页');
+      var home = el('a', 'btn btn-ghost', t('common.backHome'));
       home.href = '../../';
       acts.appendChild(home);
       card.appendChild(acts);
@@ -487,7 +544,7 @@
       // 逐题回顾
       var rev = el('div', 'card card-pad');
       rev.style.marginTop = '18px';
-      rev.appendChild(el('h3', '', '答题回顾'));
+      rev.appendChild(el('h3', '', t('exam.review')));
       list.forEach(function (q, idx) {
         var mine = answers[idx];
         var ok = mine === q.answer;
@@ -495,28 +552,29 @@
         box.style.padding = '16px 0';
         box.style.borderTop = '1px solid var(--line)';
 
-        var tag = el('span', 'pill', ok ? '正确' : (mine === null ? '未作答' : '错误'));
+        var tag = el('span', 'pill', ok ? t('exam.tagCorrect') : (mine === null ? t('exam.tagUnanswered') : t('exam.tagWrong')));
         tag.style.background = ok ? 'var(--ok-soft)' : 'var(--bad-soft)';
         tag.style.color = ok ? 'var(--ok)' : 'var(--bad)';
         tag.style.marginRight = '8px';
-        var t = el('p');
-        t.style.fontWeight = '700';
-        t.style.margin = '0 0 8px';
-        t.appendChild(tag);
-        t.appendChild(document.createTextNode(q.categoryName + ' · 第 ' + (idx + 1) + ' 题'));
-        box.appendChild(t);
+        var t2 = el('p');
+        t2.style.fontWeight = '700';
+        t2.style.margin = '0 0 8px';
+        t2.appendChild(tag);
+        t2.appendChild(document.createTextNode(catName(q.category) + ' · ' + t('exam.questionN', { n: idx + 1 })));
+        box.appendChild(t2);
 
         var qt = el('p');
         qt.style.fontWeight = '600';
         qt.style.marginBottom = '8px';
-        qt.textContent = q.q;
+        qt.textContent = lq(q).q;
         box.appendChild(qt);
 
         var fig = figure(q, q.image && q.image.indexOf('sv-') === 0);
         if (fig) box.appendChild(fig);
 
         var ul = el('ul', 'opts');
-        q.options.forEach(function (text, oi) {
+        var lq2 = lq(q);
+        lq2.options.forEach(function (text, oi) {
           var li = el('li');
           var d = el('div', 'opt');
           d.style.cursor = 'default';
@@ -534,7 +592,7 @@
         e.style.margin = '10px 0 0';
         e.style.fontSize = '.9rem';
         e.style.color = 'var(--ink-2)';
-        e.textContent = '解析：' + q.explanation;
+        e.textContent = t('common.explanation') + '：' + lq(q).explanation;
         box.appendChild(e);
 
         rev.appendChild(box);
@@ -547,6 +605,7 @@
 
     render();
     startTimer();
+    document.addEventListener('rc:locale', function () { if (submitted) paintResult(); else render(); });
   }
 
   /* ---------- 启动 ---------- */

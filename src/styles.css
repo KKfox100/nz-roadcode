@@ -223,6 +223,47 @@ p:last-child { margin-bottom: 0; }
   box-shadow: var(--sh-xs);
 }
 
+/* ---------- 语言切换器 ----------
+   顶栏右侧的紧凑分段控件。桌面显示全称，窄屏只显示语言缩写。
+   移动端的 .site-nav 是 display:none，但切换器要保留可见 —— 它放在 .site-nav
+   之外，因此不受影响。 */
+.lang-switch {
+  display: flex; align-items: center; gap: 2px;
+  margin-left: var(--sp-2);
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--surface-soft);
+  flex: none;
+}
+.lang-switch button {
+  appearance: none; border: 0; background: transparent;
+  min-height: 30px; padding: 0 9px;
+  border-radius: var(--r-full);
+  color: var(--ink-3); font: inherit; font-size: .8rem; font-weight: 500;
+  line-height: 1; cursor: pointer; white-space: nowrap;
+  transition: background .18s var(--ease), color .18s var(--ease);
+}
+.lang-switch button:hover { background: var(--bg-sunken); color: var(--ink); }
+.lang-switch button.is-active {
+  background: var(--brand); color: #fff;
+  box-shadow: var(--sh-xs);
+}
+.lang-short { display: inline; }
+.lang-full { display: none; }
+
+@media (min-width: 900px) {
+  .lang-switch { margin-left: var(--sp-3); }
+  .lang-short { display: none; }
+  .lang-full { display: inline; }
+}
+
+/* 手机横窄时顶栏空间紧张：切换器只留缩写，且不外扩 */
+@media (max-width: 420px) {
+  .lang-switch { margin-left: auto; padding: 2px; gap: 0; }
+  .lang-switch button { min-height: 28px; padding: 0 7px; font-size: .74rem; }
+}
+
 /* ==========================================================================
    4. 底部标签栏（移动端主导航 —— 拇指可达）
    ========================================================================== */
