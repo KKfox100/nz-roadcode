@@ -101,7 +101,7 @@ tools/figure-sheet.mjs    生成图示对照页到 tests/shots/（场景图叠�
 tools/shot-live.cjs       抓页面截图（--questions / --sheet / --scenes / --kannz）
 build.mjs          构建脚本：把题库渲染成静态站点到 dist/
 dist/              构建产物（= Cloudflare 静态资源目录，已 gitignore）
-tests/e2e.cjs      端到端测试（真实 Chrome + CDP，140 项断言）
+tests/e2e.cjs      端到端测试（真实 Chrome + CDP，139 项断言）
 tests/live-security.cjs  线上安全检查（源码/数据文件不可访问）
 wrangler.jsonc     Cloudflare Workers 部署配置
 research/          研究脚本与原始素材（不部署，仅供核对）
@@ -374,6 +374,26 @@ theme-color）** / console 错误。
 `答案 = 对向车辆要让行`。
 
 截图输出在 `tests/shots/`。
+
+### 标志图与题面也要对照（不是只看答案）
+
+文字答案对 ≠ 页面上的图对。**每条 sign 题配的图必须真的画的是题干描述的那块标志**
+（形状 / 颜色 / 图案 / 数字方向）—— 因为多选题靠图区分题意，图文不一致会让学员记住错的。
+
+全库 261 题答案审计后，又专门做了一轮「图对题」对照（把 `src/images.mjs` 里
+所有 `sign-*` 自渲染成 contact sheet，逐题跟 `data/sign.json` 的 `image` 字段核对），
+
+发现并修了 3 处不匹配：
+
+| 题号 | 题面描述 | 当时的图 | 修法 |
+|---|---|---|---|
+| `sign-31` | 「橙黄色临时限速标志（数值低于平时限速）」 | 道路施工菱形 `sign-roadworks` | 新增 `sign-temp-speed`（橙色矩形 + 白盘 + 红环 + 数字），重指 |
+| `sign-32` | 「临时标线…有时用黄色以区别于永久」 | 白色虚线中线 `mark-center-white-dashed` | 换为 `mark-center-yellow-dashed`（黄虚线） |
+| `sign-no-overtaking`（`sign-08`） | 「禁止超车」 | 红圈内两辆车（第二辆被画成红色示意禁止），缺红色对角斜杠 | 加回规范的红对角斜杠，并把两辆车都画成黑色 |
+
+**约定**：加新的 sign 题时，确认 `data/sign.json` 里 `image` 字段指到的图，
+真的画的是题干那句「红色八角形 / 倒三角 / 黄底菱形内 T 形…」描述的那块标志。
+改 `src/images.mjs` 里某个 sign 时，跑一次 contact sheet 自检比对着看最快。
 
 同一个脚本可以直接跑线上（把 `BASE` 指过去），验证部署结果：
 
