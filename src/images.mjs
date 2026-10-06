@@ -100,11 +100,12 @@ export const signs = {
           <rect x="58" y="66" width="26" height="12" rx="5" fill="#1f2937"/>
           <circle cx="61" cy="102" r="7" fill="#1f2937"/>
           <circle cx="86" cy="102" r="7" fill="#1f2937"/>
-          <rect x="106" y="104" width="42" height="26" rx="8" fill="#dc2626"/>
-          <rect x="112" y="98" width="26" height="12" rx="5" fill="#dc2626"/>
+          <rect x="106" y="104" width="42" height="26" rx="8" fill="#1f2937"/>
+          <rect x="112" y="98" width="26" height="12" rx="5" fill="#1f2937"/>
           <circle cx="115" cy="134" r="7" fill="#1f2937"/>
           <circle cx="140" cy="134" r="7" fill="#1f2937"/>
-        </g>`)}
+        </g>
+        <line x1="44" y1="44" x2="156" y2="156" stroke="#dc2626" stroke-width="17" stroke-linecap="round"/>`)}
     </svg>`,
 
   'sign-roadworks': () => `
@@ -314,6 +315,13 @@ export const signs = {
         <circle cx="100" cy="72" r="12" fill="#ef4444"/>
         <circle cx="100" cy="100" r="12" fill="#facc15"/>
         <circle cx="100" cy="128" r="12" fill="#22c55e"/>`)}
+    </svg>`,
+
+  'sign-temp-speed': () => `
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="临时限速">
+      <rect x="16" y="44" width="168" height="112" rx="10" fill="#f97316" stroke="#1f2937" stroke-width="6"/>
+      <circle cx="100" cy="100" r="46" fill="#ffffff" stroke="#dc2626" stroke-width="11"/>
+      ${txt('50', 56, '#1f2937', 104, '800')}
     </svg>`,
 };
 
