@@ -208,7 +208,7 @@ export const UI = {
 
   'zh-Hant': {
     'site.name': 'NZ Road Code 中文版',
-    'site.tagline': '新西蘭交規理論學習和模擬考試',
+    'site.tagline': '紐西蘭交規理論學習和模擬考試',
     'site.brandSub': 'NEW ZEALAND ROAD CODE',
 
     'nav.home': '首頁',
@@ -241,10 +241,10 @@ export const UI = {
     'common.browse': '瀏覽題庫',
     'study.qCount': '第 {i} 題 / 共 {n} 題',
 
-    'home.badge': '新西蘭駕照理論考試 · 中文題庫',
-    'home.h1a': '新西蘭交規',
+    'home.badge': '紐西蘭駕照理論考試 · 中文題庫',
+    'home.h1a': '紐西蘭交規',
     'home.h1b': '理論學習和模擬考試',
-    'home.lede': '按新西蘭官方道路規則整理的 8 個學習分類、共 {n} 道中文試題。逐題即時判分、每題都有解析，配合四種題量的模擬考試，幫你把規則真正弄懂，而不是死記答案。',
+    'home.lede': '按紐西蘭官方道路規則整理的 8 個學習分類、共 {n} 道中文試題。逐題即時判分、每題都有解析，配合四種題量的模擬考試，幫你把規則真正弄懂，而不是死記答案。',
     'home.startExam': '開始正式考試模擬',
     'home.startStudy': '分類理論學習',
     'home.statQuestions': '道原創試題',
@@ -258,7 +258,7 @@ export const UI = {
     'home.examMeta': '限時 {t} 分鐘 · 通過線 {n} 題',
     'home.startThisExam': '開始考試',
     'home.whatHead': '這個網站有什麼',
-    'home.whatText': '覆蓋新西蘭小型汽車駕照理論考試的全部知識領域：核心規則、駕駛行為、停車標識、緊急事故、道路位置、交通路口、理論知識和道路標識。每道題都配有中文解析，講清楚「為什麼」。',
+    'home.whatText': '覆蓋紐西蘭小型汽車駕照理論考試的全部知識領域：核心規則、駕駛行為、停車標識、緊急事故、道路位置、交通路口、理論知識和道路標識。每道題都配有中文解析，講清楚「為什麼」。',
     'home.whatMore': '瀏覽全部 {n} 道題 →',
     'home.howHead': '如何準備理論考試',
     'home.howText': '建議先按分類逐個學習，每題都讀一遍解析；全部過完後再做「正式考試模擬（35 題）」。連續兩次達到 90% 以上正確率，說明知識點已經掌握。',
@@ -270,15 +270,15 @@ export const UI = {
     'cap.sv-right-turn': '藍車右轉 · 紅車對向直行',
 
     'exam.e10.label': '簡單模擬',
-    'exam.e10.desc': '適合剛接觸新西蘭交規的初學者，快速熟悉題型。',
+    'exam.e10.desc': '適合剛接觸紐西蘭交規的初學者，快速熟悉題型。',
     'exam.e20.label': '中度模擬',
     'exam.e20.desc': '覆蓋主要知識點的中等強度練習。',
     'exam.e35.label': '正式考試模擬',
-    'exam.e35.desc': '與新西蘭駕照理論考試題量一致，通過線為答對 32 題。',
+    'exam.e35.desc': '與紐西蘭駕照理論考試題量一致，通過線為答對 32 題。',
     'exam.e50.label': '全面模擬',
     'exam.e50.desc': '最大範圍的綜合測試，適合考前衝刺。',
     'study.title': '理論學習',
-    'study.indexIntro': '新西蘭小型汽車駕照理論考試的知識點分為 8 個領域，共 {n} 道試題。每個分類都可以逐題學習：選完答案立刻看到對錯和解析，答錯的題會在學習結束時彙總出來。',
+    'study.indexIntro': '紐西蘭小型汽車駕照理論考試的知識點分為 8 個領域，共 {n} 道試題。每個分類都可以逐題學習：選完答案立刻看到對錯和解析，答錯的題會在學習結束時彙總出來。',
     'study.catMeta': '共 {n} 題 →',
     'study.allQuestions': '全部試題',
     'study.allQuestionsSub': '按分類列出，點擊可直接查看答案解析',
@@ -298,7 +298,7 @@ export const UI = {
     'exam.questionN': '第 {n} 題',
     'exam.indexIntro': '從全部 {n} 道題中按分類比例隨機抽題，作答過程中不顯示對錯，交卷後統一給出成績與逐題回顧。計時會在時間耗盡時自動交卷。',
     'exam.pageMeta': '限時 {t} 分鐘 · 通過線 {n} 題 · 交卷後可逐題回顧',
-    'exam.scoringNote': '新西蘭駕照理論考試為 35 題、答對 32 題及格。本站所有模擬考試統一採用 90% 的正確率作為通過線，便於橫向比較。',
+    'exam.scoringNote': '紐西蘭駕照理論考試為 35 題、答對 32 題及格。本站所有模擬考試統一採用 90% 的正確率作為通過線，便於橫向比較。',
     'exam.start': '開始考試',
     'exam.countLabel': '{n} 題',
     'exam.answered': '已答 {n} 題',
@@ -334,10 +334,10 @@ export const UI = {
     'result.wrongReview': '錯題回顧（{n} 題）',
 
     'about.title': '關於本站',
-    'about.intro': '{site} 是一個面向中文用戶的新西蘭駕照理論學習與模擬考試站點。全站只做兩件事：理論學習 和 模擬考試。',
+    'about.intro': '{site} 是一個面向中文用戶的紐西蘭駕照理論學習與模擬考試站點。全站只做兩件事：理論學習 和 模擬考試。',
     'about.hContent': '內容說明',
-    'about.pContent': '本站全部 {n} 道試題、選項與解析均為依據新西蘭官方道路規則（New Zealand Road Code / Land Transport (Road User) Rule 2004）重新撰寫的中文原創內容，用於幫助讀者理解規則本身。站內所有道路標誌與路口示意圖為自繪 SVG 圖形，不使用任何第三方圖片素材。',
-    'about.pDisclaimer': '本站不是新西蘭交通局（NZTA / Waka Kotahi）的官方產品，題目與真實考試的表述不完全相同。真實考試請以官方發布的 Road Code 為準。',
+    'about.pContent': '本站全部 {n} 道試題、選項與解析均為依據紐西蘭官方道路規則（New Zealand Road Code / Land Transport (Road User) Rule 2004）重新撰寫的中文原創內容，用於幫助讀者理解規則本身。站內所有道路標誌與路口示意圖為自繪 SVG 圖形，不使用任何第三方圖片素材。',
+    'about.pDisclaimer': '本站不是紐西蘭交通局（NZTA / Waka Kotahi）的官方產品，題目與真實考試的表述不完全相同。真實考試請以官方發布的 Road Code 為準。',
     'about.hNoAds': '沒有廣告',
     'about.pNoAds': '本站不含任何廣告位、第三方統計腳本、追蹤像素或社交插件。頁面加載的資源只有本站自己的樣式表、腳本和圖形。',
     'about.hTips': '備考建議',
@@ -826,7 +826,7 @@ export const CATEGORY_SUMMARY = {
     ko: '운전 지식과 함께 배려 있는 운전, 돌발 상황을 올바르게 처리하는 방법을 배웁니다.'
   },
   parking: {
-    'zh-Hant': '開車容易，停車也不難；只要你看得懂、記得住新西蘭的停車標線和標誌牌。',
+    'zh-Hant': '開車容易，停車也不難；只要你看得懂、記得住紐西蘭的停車標線和標誌牌。',
     en: 'Driving is easy, and so is parking — once you can read and remember New Zealand’s parking signs and markings.',
     ja: '運転も駐車も、ニュージーランドの駐車標示と標識を読み取れれば難しくありません。',
     ko: '뉴질랜드의 주차 표시와 표지만 읽을 수 있다면 운전도 주차도 어렵지 않습니다.'
@@ -856,7 +856,7 @@ export const CATEGORY_SUMMARY = {
     ko: '차량 안전검사, 승객과 화물 운송, 견인, 안전벨트, 면허 사용 규정.'
   },
   sign: {
-    'zh-Hant': '新西蘭交通標識：讓行、限速、環島、禁停、減速帶、施工及其它常用標誌。',
+    'zh-Hant': '紐西蘭交通標識：讓行、限速、環島、禁停、減速帶、施工及其它常用標誌。',
     en: 'New Zealand road signs: give way, speed limits, roundabouts, no stopping, speed humps, roadworks and more.',
     ja: 'ニュージーランドの標識：譲れ、速度制限、ラウンドアバウト、駐停車禁止、減速帯、工事など。',
     ko: '뉴질랜드 교통표지: 양보, 속도제한, 회전교차로, 주정차 금지, 과속방지턱, 공사 등.'
@@ -910,6 +910,10 @@ const S2T_CHARS = {
 
 /** 双字及以上词组优先替换（避免单字误伤，例如「干」在「干燥」与「干净」中不同）。 */
 const S2T_PHRASES = {
+  // ⚠ 地名/专名这类**词汇差异**必须走词组表：单字表只会把「新西兰」逐字转成
+  // 「新西蘭」—— 那不是台湾正体（台湾用「紐西蘭」，马来西亚/新加坡才用「纽西兰」）。
+  // 词组表在单字表**之前**执行，所以这里能拦住。
+  '新西兰': '紐西蘭',
   '信息': '資訊', '软件': '軟體', '硬件': '硬體', '网络': '網路',
   '默认': '預設', '设置': '設定', '打印': '列印', '屏幕': '螢幕',
   '视频': '影片', '音频': '音訊', '质量': '品質', '数据': '資料',

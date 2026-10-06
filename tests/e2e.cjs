@@ -945,6 +945,38 @@ async function waitStyled(b) {
     await b.goto(BASE + '/');
     await waitStyled(b);
 
+    /* ---------------- 12c. 繁体地名用词 ----------------
+       「新西兰」在繁体（中国台湾正体）里是「紐西蘭」，不是机械逐字转换出来的
+       「新西蘭」（那是简体逐字转繁的产物，任何地区都不这么写）。
+       马来西亚/新加坡用「纽西兰」，也不是台湾用法。
+       这条容易在「补题库 / 改转换表」时回归，故按事实钉住。            */
+    console.log('\n[12c] 繁体地名用词');
+    const nzInfo = await b.eval(`(() => {
+      const pick = (loc) => {
+        const c = window.RC_I18N.CONTENT[loc];
+        let good = 0, bad = 0, ex = '', sim = 0;
+        for (const v of Object.values(c)) {
+          const t = (v.q || '') + (v.o || []).join('') + (v.e || '');
+          if (t.includes('紐西蘭')) { good++; if (!ex) ex = t.slice(0, 40); }
+          if (t.includes('新西蘭')) bad++;
+          if (t.includes('新西兰')) sim++;
+        }
+        return { good, bad, ex, sim };
+      };
+      return {
+        hant: pick('zh-Hant'),
+        hans: pick('zh-Hans'),
+        tagline: window.RC_I18N.UI['zh-Hant']['site.tagline'],
+        badge:   window.RC_I18N.UI['zh-Hant']['home.badge']
+      };
+    })()`);
+    check('繁体题库用「紐西蘭」（非「新西蘭」）', nzInfo.hant.good > 0 && nzInfo.hant.bad === 0,
+      'good=' + nzInfo.hant.good + ' bad=' + nzInfo.hant.bad + ' ex=' + nzInfo.hant.ex);
+    check('繁体词典文案用「紐西蘭」', /紐西蘭/.test(nzInfo.tagline) && /紐西蘭/.test(nzInfo.badge),
+      nzInfo.tagline + ' | ' + nzInfo.badge);
+    check('简体层仍用「新西兰」且无繁体混入', nzInfo.hans.sim > 0 && nzInfo.hans.good === 0,
+      '简体含新西兰=' + nzInfo.hans.sim + ' 含紐西蘭=' + nzInfo.hans.good);
+
     /* ---------------- 13. console 错误 ---------------- */
     console.log('\n[13] 控制台错误');
     const errs = b.consoleErrors().filter(e => !/favicon/i.test(e));
