@@ -977,6 +977,47 @@ async function waitStyled(b) {
     check('简体层仍用「新西兰」且无繁体混入', nzInfo.hans.sim > 0 && nzInfo.hans.good === 0,
       '简体含新西兰=' + nzInfo.hans.sim + ' 含紐西蘭=' + nzInfo.hans.good);
 
+    /* ---------------- 12d. 繁体歧义字用词 ----------------
+       简体转繁不是「一简对一繁」：有一批字要按**词**定字，逐字转必错。
+       全站逐条核对后，这几组按事实钉住（2026-10-06）：
+         · 里 —— 方位义作「裡」，但「公里」是长度单位，繁体仍作「里」。
+         · 复 —— 恢复/反复/修复 → 復；只有「复杂」用 複。
+         · 制 —— 限制/控制/制动/强制 → 制；只有「制造/制作」用 製。
+         · 冲 —— 冲突/冲刺/缓冲 → 衝；「冲刷/冲水」→ 沖。
+         · 干 —— 干扰→干；干燥/干净（乾湿义）→乾；主干道/题干（骨干义）→幹。
+         · 台 —— 平台/仪表台 → 臺。
+         · 并 —— 并列义 → 並；但「合并」→ 合併。
+       这一组是唯一对**具体用词**的断言，改动转换逻辑或文案时要一起复核。 */
+    console.log('\n[12d] 繁体歧义字用词');
+    const amb = await b.eval(`(() => {
+      const all = JSON.stringify(window.RC_I18N.CONTENT['zh-Hant']);
+      const n = (w) => all.split(w).length - 1;
+      return {
+        km:      n('公里'),      kmBad: n('公裡'),
+        recovery: n('恢復'),    repeat: n('反覆'),   complex: n('複雜'),
+        brake:   n('制動'),      limit:  n('限制'),
+        conflict: n('衝突'),     buffer: n('緩衝'),   wash: n('沖水'),
+        interfere: n('干擾'),    dry:   n('乾燥'),    clean: n('乾淨'),
+        trunk:   n('主幹道'),    platform: n('平臺'),
+        merge:   n('合併'),      parallel: n('並排')
+      };
+    })()`);
+    check('「公里」不被转成「公裡」', amb.km > 0 && amb.kmBad === 0,
+      '公里=' + amb.km + ' 公裡=' + amb.kmBad);
+    check('恢复/反复/复杂 分别作 恢復/反覆/複雜',
+      amb.recovery > 0 && amb.repeat > 0 && amb.complex > 0,
+      JSON.stringify({ 恢復: amb.recovery, 反覆: amb.repeat, 複雜: amb.complex }));
+    check('制动/限制 仍作「制」而非「製」', amb.brake > 0 && amb.limit > 0,
+      JSON.stringify({ 制動: amb.brake, 限制: amb.limit }));
+    check('冲突/缓冲 → 衝，冲水 → 沖',
+      amb.conflict > 0 && amb.buffer > 0 && amb.wash > 0,
+      JSON.stringify({ 衝突: amb.conflict, 緩衝: amb.buffer, 沖水: amb.wash }));
+    check('干扰→干 / 干燥→乾 / 主干道→幹', amb.interfere > 0 && amb.dry > 0 && amb.clean > 0 && amb.trunk > 0,
+      JSON.stringify({ 干擾: amb.interfere, 乾燥: amb.dry, 乾淨: amb.clean, 主幹道: amb.trunk }));
+    check('平台 → 平臺', amb.platform > 0, '平臺=' + amb.platform);
+    check('合并 → 合併，并排 → 並排', amb.merge > 0 && amb.parallel > 0,
+      JSON.stringify({ 合併: amb.merge, 並排: amb.parallel }));
+
     /* ---------------- 13. console 错误 ---------------- */
     console.log('\n[13] 控制台错误');
     const errs = b.consoleErrors().filter(e => !/favicon/i.test(e));

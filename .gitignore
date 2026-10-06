@@ -2,6 +2,7 @@ node_modules/
 dist/
 .wrangler/
 tests/shots/
+tests/tmp/
 tests/*-run.txt
 *.log
 .DS_Store
