@@ -331,7 +331,7 @@ function buildHome() {
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <span class="pill" data-i18n="home.badge">新西兰驾照理论考试 · 官方题库</span>
+      <span class="pill" data-i18n="home.badge">新西兰驾照理论考试 · 交规题库</span>
       <h1><span data-i18n="home.h1a">新西兰交规</span><br><em data-i18n="home.h1b">理论学习和模拟考试</em></h1>
       <p class="hero-lede" data-i18n="home.lede" data-n="${TOTAL_QUESTIONS}">按新西兰官方道路规则整理的 8 个学习分类、共 ${TOTAL_QUESTIONS} 道中文试题。逐题即时判分、每题都有解析，配合四种题量的模拟考试，帮你把规则真正弄懂，而不是死记答案。</p>
       <div class="hero-actions">

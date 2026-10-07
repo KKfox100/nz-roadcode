@@ -1022,8 +1022,10 @@ async function waitStyled(b) {
        站点已是 5 语言，首页 pill 当初写的是「中文题库」，5 个语言全照抄 ——
        于是日文用户看到「中国語問題集」、韩文用户看到「중국어 문제집」、
        英文用户看到「Chinese question bank」，都以为这个站只供给中文读者。
-       badge 应该描述**内容类型**（驾照理论考试），不该限定**语言**。         */
-    console.log('\n[12e] 首页 badge 不限定语言');
+       badge 应该描述**内容类型**（驾照理论考试），不该限定**语言**。
+       2026-10-07 用户定稿中文用「交规题库」（比「官方题库」更准 ——
+       站内内容是依据官方路规自撰，不是 NZTA 官方题库，别暗示官方背书）。   */
+    console.log('\n[12e] 首页 badge 文案');
     const badges = await b.eval(`(() => {
       const out = {};
       for (const loc of window.RC_I18N.LOCALES) out[loc] = window.RC_I18N.UI[loc]['home.badge'];
@@ -1035,6 +1037,8 @@ async function waitStyled(b) {
       badLocs.length ? '含限定词: ' + badLocs.join(',') : JSON.stringify(badges));
     check('各语言 home.badge 都非空且互不相同', new Set(Object.values(badges)).size === Object.keys(badges).length,
       JSON.stringify(badges));
+    check('中文 badge 用「交规题库 / 交規題庫」', /交规题库/.test(badges['zh-Hans']) && /交規題庫/.test(badges['zh-Hant']),
+      JSON.stringify({ hans: badges['zh-Hans'], hant: badges['zh-Hant'] }));
 
     /* ---------------- 13. console 错误 ---------------- */
     console.log('\n[13] 控制台错误');
