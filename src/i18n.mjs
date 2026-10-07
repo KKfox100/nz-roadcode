@@ -94,7 +94,7 @@ export const UI = {
     'common.browse': '浏览题库',
     'study.qCount': '第 {i} 题 / 共 {n} 题',
 
-    'home.badge': '新西兰驾照理论考试 · 中文题库',
+    'home.badge': '新西兰驾照理论考试 · 官方题库',
     'home.h1a': '新西兰交规',
     'home.h1b': '理论学习和模拟考试',
     'home.lede': '按新西兰官方道路规则整理的 8 个学习分类、共 {n} 道中文试题。逐题即时判分、每题都有解析，配合四种题量的模拟考试，帮你把规则真正弄懂，而不是死记答案。',
@@ -241,7 +241,7 @@ export const UI = {
     'common.browse': '瀏覽題庫',
     'study.qCount': '第 {i} 題 / 共 {n} 題',
 
-    'home.badge': '紐西蘭駕照理論考試 · 中文題庫',
+    'home.badge': '紐西蘭駕照理論考試 · 官方題庫',
     'home.h1a': '紐西蘭交規',
     'home.h1b': '理論學習和模擬考試',
     'home.lede': '按紐西蘭官方道路規則整理的 8 個學習分類、共 {n} 道中文試題。逐題即時判分、每題都有解析，配合四種題量的模擬考試，幫你把規則真正弄懂，而不是死記答案。',
@@ -388,7 +388,7 @@ export const UI = {
     'common.browse': 'Browse questions',
 
     'study.qCount': 'Question {i} of {n}',
-    'home.badge': 'NZ driver licence theory test · Chinese question bank',
+    'home.badge': 'NZ driver licence theory test · official question bank',
     'home.h1a': 'New Zealand road rules',
     'home.h1b': 'theory study and practice tests',
     'home.lede': 'Eight study categories covering New Zealand’s official road rules, with {n} practice questions. Every question is marked instantly with a full explanation, alongside four mock-test sizes — so you actually understand the rules instead of memorising answers.',
@@ -535,7 +535,7 @@ export const UI = {
     'common.browse': '問題を見る',
 
     'study.qCount': '{n} 問中 {i} 問目',
-    'home.badge': 'NZ 運転免許 学科試験 · 中国語問題集',
+    'home.badge': 'NZ 運転免許 学科試験 · 公式問題集',
     'home.h1a': 'ニュージーランドの交通ルール',
     'home.h1b': '学科学習と模擬試験',
     'home.lede': 'ニュージーランドの公式道路ルールをまとめた 8 つの学習カテゴリ、全 {n} 問。1 問ごとに即時採点し、すべてに解説が付きます。4 種類の模擬試験とあわせて、答えを丸暗記するのではなくルールを本当に理解できます。',
@@ -682,7 +682,7 @@ export const UI = {
     'common.browse': '문제 보기',
 
     'study.qCount': '{n}문항 중 {i}번',
-    'home.badge': '뉴질랜드 운전면허 필기시험 · 중국어 문제집',
+    'home.badge': '뉴질랜드 운전면허 필기시험 · 공식 문제집',
     'home.h1a': '뉴질랜드 도로 교통법규',
     'home.h1b': '이론 학습과 모의고사',
     'home.lede': '뉴질랜드 공식 도로 규칙을 정리한 8개 학습 카테고리, 총 {n}문항. 문항마다 즉시 채점되고 모든 문제에 해설이 있습니다. 네 가지 모의고사와 함께, 정답을 암기하는 대신 규칙을 제대로 이해할 수 있습니다.',

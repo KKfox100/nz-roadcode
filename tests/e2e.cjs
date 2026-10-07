@@ -1018,6 +1018,24 @@ async function waitStyled(b) {
     check('合并 → 合併，并排 → 並排', amb.merge > 0 && amb.parallel > 0,
       JSON.stringify({ 合併: amb.merge, 並排: amb.parallel }));
 
+    /* ---------------- 12e. 首页 badge 不得限定语言 ----------------
+       站点已是 5 语言，首页 pill 当初写的是「中文题库」，5 个语言全照抄 ——
+       于是日文用户看到「中国語問題集」、韩文用户看到「중국어 문제집」、
+       英文用户看到「Chinese question bank」，都以为这个站只供给中文读者。
+       badge 应该描述**内容类型**（驾照理论考试），不该限定**语言**。         */
+    console.log('\n[12e] 首页 badge 不限定语言');
+    const badges = await b.eval(`(() => {
+      const out = {};
+      for (const loc of window.RC_I18N.LOCALES) out[loc] = window.RC_I18N.UI[loc]['home.badge'];
+      return out;
+    })()`);
+    const LANG_WORDS = /中文|中国語|중국어|Chinese|中國語/i;
+    const badLocs = Object.entries(badges).filter(([, v]) => LANG_WORDS.test(v)).map(([k]) => k);
+    check('各语言 home.badge 都不含语言限定词', badLocs.length === 0,
+      badLocs.length ? '含限定词: ' + badLocs.join(',') : JSON.stringify(badges));
+    check('各语言 home.badge 都非空且互不相同', new Set(Object.values(badges)).size === Object.keys(badges).length,
+      JSON.stringify(badges));
+
     /* ---------------- 13. console 错误 ---------------- */
     console.log('\n[13] 控制台错误');
     const errs = b.consoleErrors().filter(e => !/favicon/i.test(e));
