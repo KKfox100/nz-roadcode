@@ -48,7 +48,21 @@ echo "repo      $REPO  ($REMOTE/$BRANCH)"
 
 # ---------- 1. bash 侧采集 git 事实 ----------
 HEAD_SHA="$(git rev-parse HEAD)"
-PARENT_SHA="$(git rev-parse HEAD^)"
+
+# 两个「父」概念必须分开（2026-10-12 踩过）：
+#
+#   DIFF_BASE  —— 本地对象，用来算「本次改了哪些文件」。恒为 HEAD^。
+#   PARENT_SHA —— 写进 commit 对象的 parent，会被 GitHub 校验必须真实存在。
+#
+# 用 API 推送时，远端 commit 与本地 commit 是「同 tree、不同 sha」（committer
+# 元数据不同），所以远端 HEAD 在本地并不存在、本地 HEAD^ 在远端也不存在。
+# 第二次推送就会撞 422 "Parent SHA does not exist"。
+#
+# 解法：DIFF_BASE 用本地 HEAD^ 算差异（本地对象一定在），PARENT_SHA 用
+# PARENT_OVERRIDE 指向远端真实父提交。前提是 DIFF_BASE 与该远端父提交
+# tree 逐字节一致 —— 由调用方负责确认（git diff 为空）。
+DIFF_BASE="$(git rev-parse HEAD^)"
+PARENT_SHA="${PARENT_OVERRIDE:-$DIFF_BASE}"
 HEAD_TREE="$(git rev-parse HEAD^{tree})"
 AUTHOR_NAME="$(git log -1 --format=%an)"
 AUTHOR_EMAIL="$(git log -1 --format=%ae)"
@@ -58,7 +72,7 @@ echo "HEAD      ${HEAD_SHA:0:7}"
 echo "PARENT    ${PARENT_SHA:0:7}"
 echo "TREE      $HEAD_TREE"
 
-git diff --name-only "$PARENT_SHA" "$HEAD_SHA" > "$TMP/changed.txt"
+git diff --name-only "$DIFF_BASE" "$HEAD_SHA" > "$TMP/changed.txt"
 : > "$TMP/changed.json"
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -79,7 +93,7 @@ echo "=== ROOT ===" >> "$TMP/trees.txt"
 git ls-tree "$HEAD_SHA" >> "$TMP/trees.txt"
 
 # 父提交的目录清单（用于判断某个 tree 是否含新增文件而必须重建）
-git ls-tree -r -d --name-only "$PARENT_SHA" > "$TMP/parent-dirs.txt"
+git ls-tree -r -d --name-only "$DIFF_BASE" > "$TMP/parent-dirs.txt"
 git ls-tree -r -d --name-only "$HEAD_SHA" > "$TMP/head-dirs.txt"
 
 git log -1 --format=%B > "$TMP/message.txt"
