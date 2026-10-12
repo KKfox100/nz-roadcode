@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { allImages, thumbnails, renderImage, captions } from './src/images.mjs';
 import {
   LOCALES, LOCALE_NATIVE, LOCALE_SHORT, LOCALE_HTML_LANG, LOCALE_OG,
@@ -62,6 +63,32 @@ function copyOut(absPath, srcPath) {
   mkdirSync(dirname(absPath), { recursive: true });
   cpSync(srcPath, absPath);
   WRITTEN.add(resolve(absPath));
+}
+
+/* ---------- 资源版本串（缓存失效） ----------
+
+   dist/_headers 给 /assets/* 设了 7 天缓存，而这些文件**文件名不带哈希**。
+   于是每次发版，老设备最多 7 天看不到新的 JS/CSS —— 换语言切不动、
+   首页 badge 还是旧文案，都是这个原因（2026-10-07：H5 上 badge 迟迟不变）。
+
+   修法：给引用加内容哈希查询串 `?v=<hash>`。内容变了 URL 就变，浏览器必然
+   重新拉取；内容没变则继续命中缓存，不牺牲性能。不动文件名，所以不涉及
+   pruneStale 遗留文件、也不影响 .assetsignore 的排除规则。
+
+   ⚠️ 必须在 buildAssets() 里把文件写完后才能算，且要早于一切页面生成。 */
+
+const ASSET_VER = new Map();
+
+/** 读一个刚写出的产物，算 8 位内容哈希，登记进 ASSET_VER。 */
+function stampAsset(name, absPath) {
+  const buf = readFileSync(absPath);
+  ASSET_VER.set(name, createHash('sha1').update(buf).digest('hex').slice(0, 8));
+}
+
+/** 生成带版本串的资源 URL。name 形如 'app.js'；r 是相对站点根的路径前缀。 */
+function assetUrl(name, r = '') {
+  const v = ASSET_VER.get(name);
+  return `${r}assets/${name}${v ? `?v=${v}` : ''}`;
 }
 
 /**
@@ -231,8 +258,8 @@ ${hreflangLinks(path)}
 <meta property="og:url" content="${esc(canonical)}">
 <meta property="og:locale" content="${LOCALE_OG[dl]}">
 ${LOCALES.filter(l => l !== dl).map(l => `<meta property="og:locale:alternate" content="${LOCALE_OG[l]}">`).join('\n')}
-<link rel="icon" href="${r}assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="${r}assets/styles.css">
+<link rel="icon" href="${assetUrl('favicon.svg', r)}" type="image/svg+xml">
+<link rel="stylesheet" href="${assetUrl('styles.css', r)}">
 ${head}
 </head>
 <body${focus ? ' class="is-focus"' : ''}>
@@ -267,11 +294,11 @@ ${body}
   <a href="${r}study/"${cur('study')}>${icon('book', 21)}<span data-i18n="nav.study">理论学习</span></a>
   <a href="${r}exam/"${cur('exam')}>${icon('clipboard', 21)}<span data-i18n="nav.exam">模拟考试</span></a>
 </nav>
-<script src="${r}assets/i18n.js"></script>
-<script src="${r}assets/i18n-runtime.js"></script>
-<script src="${r}assets/images.js"></script>
-<script src="${r}assets/questions.js"></script>
-<script src="${r}assets/app.js"></script>
+<script src="${assetUrl('i18n.js', r)}"></script>
+<script src="${assetUrl('i18n-runtime.js', r)}"></script>
+<script src="${assetUrl('images.js', r)}"></script>
+<script src="${assetUrl('questions.js', r)}"></script>
+<script src="${assetUrl('app.js', r)}"></script>
 </body>
 </html>`;
 }
@@ -403,7 +430,7 @@ function buildHome() {
     alternateName: SITE_TAGLINE,
     url: SITE_URL + '/',
     inLanguage: 'zh-CN',
-    description: `新西兰驾照理论考试中文题库，共 ${TOTAL_QUESTIONS} 道试题，覆盖 ${categories.length} 个知识分类，提供分类学习与模拟考试。`
+    description: `新西兰驾照理论考试交规题库，共 ${TOTAL_QUESTIONS} 道试题，覆盖 ${categories.length} 个知识分类，提供分类学习与模拟考试。`
   };
 
   page('index.html', layout({
@@ -701,7 +728,6 @@ function buildAssets() {
   copyOut(join(DIST, 'assets', 'styles.css'), join(ROOT, 'src', 'styles.css'));
   copyOut(join(DIST, 'assets', 'app.js'), join(ROOT, 'src', 'app.js'));
   copyOut(join(DIST, 'assets', 'i18n-runtime.js'), join(ROOT, 'src', 'i18n-runtime.js'));
-
   // 多语言：UI 词典 + 各语言题目内容。单文件内联，切换语言不额外发请求。
   const content = buildContent(categories, { en: EN, ja: JA, ko: KO });
   writeOut(join(DIST, 'assets', 'i18n.js'),
@@ -740,6 +766,10 @@ function buildAssets() {
   <text x="32" y="34" font-family="Arial,Helvetica,sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle" dominant-baseline="central">RC</text>
 </svg>`;
   writeOut(join(DIST, 'assets', 'favicon.svg'), favicon);
+
+  // 全部资源写完，统一登记内容哈希 —— 页面生成时用 assetUrl() 取带版本串的 URL。
+  ['styles.css', 'app.js', 'i18n-runtime.js', 'i18n.js', 'images.js', 'questions.js', 'favicon.svg']
+    .forEach(name => stampAsset(name, join(DIST, 'assets', name)));
 }
 
 /* ---------- 404 / robots / sitemap / headers ---------- */
@@ -796,12 +826,16 @@ function buildMeta() {
   Permissions-Policy: geolocation=(), microphone=(), camera=(), interest-cohort=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
 
-/assets/*
-  Cache-Control: public, max-age=604800
-
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
 `);
+// ↑ /assets/* 的引用在 HTML 里带内容哈希查询串（?v=<hash>，见 assetUrl()）。
+//   内容一变 URL 就变，所以可以放心设成长期不可变缓存 —— 老设备不会再像
+//   2026-10-07 那样卡着 7 天前的 i18n.js 不放（当时表现为 H5 换了语言还是旧
+//   文案）。HTML 本身必须每次回源校验（上面那条），否则拿不到新的 ?v=。
 
   // 静态资源目录就是 dist/，里面只有站点文件；这个文件是防御性的，
   // 万一以后有人把构建脚本或仓库文件混进来，也不会被上传。

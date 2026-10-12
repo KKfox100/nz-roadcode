@@ -1040,6 +1040,97 @@ async function waitStyled(b) {
     check('中文 badge 用「交规题库 / 交規題庫」', /交规题库/.test(badges['zh-Hans']) && /交規題庫/.test(badges['zh-Hant']),
       JSON.stringify({ hans: badges['zh-Hans'], hant: badges['zh-Hant'] }));
 
+    /* 光看 badge 不够 —— 「中文题库」这个说法还曾出现在**别处**：
+       meta description、og:description、首页 JSON-LD 的 description。
+       这些不经过 i18n 词典，是 build.mjs 里各写一遍的，改一处会漏另外几处。
+       所以这里直接扫**整个 dist/**，任何文件里出现旧说法都算失败。       */
+    const DIST = path.join(__dirname, '..', 'dist');
+    const BANNED = /中文题库|中文題庫|Chinese question bank|中国語問題集|중국어 문제집/;
+    const hits = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) { walk(p); continue; }
+        if (!/\.(html|js|json|xml|txt)$/.test(e.name)) continue;
+        const txt = fs.readFileSync(p, 'utf8');
+        if (BANNED.test(txt)) hits.push(path.relative(DIST, p));
+      }
+    };
+    walk(DIST);
+    check('构建产物里没有「限定语言」的旧说法（含 meta / og / JSON-LD）',
+      hits.length === 0, hits.length ? '命中: ' + hits.slice(0, 8).join(', ') : '0 处');
+
+    /* ---------------- 12f. 资源引用必须带内容哈希版本串 ----------------
+
+       dist/_headers 把 /assets/* 设成了 max-age=31536000, immutable。
+       这套长期缓存**只有在 URL 随内容变化时才成立** —— 万一以后有人手写
+       `<script src="assets/app.js">`（漏了 assetUrl()），那台设备就会永远
+       用着这一版，改什么都看不到。2026-10-07 的 H5「badge 还是中文题库」
+       就是这类问题的真实后果（当时缓存 7 天 + 无版本串）。
+
+       断言分两层：
+       ① HTML 里每个 sites 静态资源引用都带 ?v=<8位hex>；
+       ② 不同内容的资源必须有不同版本串（防止所有资源共用一个固定串）。   */
+    console.log('\n[12f] 资源版本串（缓存失效防护）');
+
+    const htmlFiles = [];
+    const collectHtml = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) collectHtml(p);
+        else if (e.name.endsWith('.html')) htmlFiles.push(p);
+      }
+    };
+    collectHtml(DIST);
+
+    const unversioned = [];
+    const seenAssetUrls = new Set();
+    for (const f of htmlFiles) {
+      const txt = fs.readFileSync(f, 'utf8');
+      const refs = txt.match(/(?:src|href)="[^"]*assets\/[^"]*"/g) || [];
+      for (const ref of refs) {
+        const url = ref.slice(ref.indexOf('"') + 1, -1);
+        // 只查本站自己的资源（相对路径或站点根），外链不管
+        if (!/(^|\/|\.\.\/)assets\//.test(url)) continue;
+        if (!/\?v=[a-f0-9]{8}$/.test(url)) {
+          unversioned.push(path.relative(DIST, f) + ' → ' + url);
+        } else {
+          seenAssetUrls.add(url.replace(/^.*assets\//, ''));
+        }
+      }
+    }
+    check('所有 HTML 里的本站资源引用都带 ?v=<8位哈希>', unversioned.length === 0,
+      unversioned.length ? JSON.stringify(unversioned.slice(0, 6)) : `${seenAssetUrls.size} 个资源`);
+
+    // 每个资源的版本串应与其内容一一对应：不同文件内容不同 → 版本串应当不同
+    const verByAsset = new Map();
+    for (const u of seenAssetUrls) {
+      const [name, q] = u.split('?v=');
+      verByAsset.set(name, q);
+    }
+    const collisions = [];
+    const byVer = new Map();
+    for (const [name, v] of verByAsset) {
+      if (!byVer.has(v)) byVer.set(v, []);
+      byVer.get(v).push(name);
+    }
+    for (const [v, names] of byVer) {
+      // 内容相同才会同串；i18n.js 与其它文件内容不可能相同，同名冲突即异常
+      if (names.length > 1) collisions.push(v + ' → ' + names.join(','));
+    }
+    check('不同资源的版本串互不相同（无哈希碰撞/写死）', collisions.length === 0,
+      collisions.length ? JSON.stringify(collisions.slice(0, 4)) : `${byVer.size} 个独立版本串`);
+
+    // 版本串确实来自内容：i18n.js 的串应与 assetUrl 算出的 sha1 前 8 位一致
+    const i18nPath = path.join(DIST, 'assets', 'i18n.js');
+    if (fs.existsSync(i18nPath)) {
+      const expect = require('node:crypto').createHash('sha1')
+        .update(fs.readFileSync(i18nPath)).digest('hex').slice(0, 8);
+      const got = verByAsset.get('i18n.js');
+      check('i18n.js 的版本串 == 其内容 sha1 前 8 位', got === expect,
+        `期望 ${expect}，实际 ${got}`);
+    }
+
     /* ---------------- 13. console 错误 ---------------- */
     console.log('\n[13] 控制台错误');
     const errs = b.consoleErrors().filter(e => !/favicon/i.test(e));
