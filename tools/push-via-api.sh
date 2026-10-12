@@ -187,11 +187,14 @@ while IFS= read -r line; do
   p="$(printf '%s' "$line" | "$NODE_BIN" -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).path)")"
   want="$(printf '%s' "$line" | "$NODE_BIN" -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0,'utf8')).sha)")"
   b64="$(git cat-file blob "HEAD:$p" | base64 -w0)"
+  # ⚠ 不能把 base64 拼进命令行：大文件（build.mjs 约 50KB → base64 约 67KB）
+  # 会撞 Windows 的 "Argument list too long"。改为写临时文件后用 --data-binary @。
+  printf '{"content":"%s","encoding":"base64"}' "$b64" > "$TMP/blob-req.json"
   resp="$(curl -sS -X POST "$API/repos/$REPO/git/blobs" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
-    -d "{\"content\":\"$b64\",\"encoding\":\"base64\"}")"
+    --data-binary @"$TMP/blob-req.json")"
   sha="$(printf '%s' "$resp" | "$NODE_BIN" -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);if(!j.sha){console.error(JSON.stringify(j));process.exit(1)}process.stdout.write(j.sha)})")"
   if [ "$sha" = "$want" ]; then
     echo "  $p  ${sha:0:9}  ✓ 与提交内容一致"
